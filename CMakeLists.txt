@@ -7,8 +7,10 @@ project (SeastarExample)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Define source directory
+# Define source directories
 set(SRC src)
+set(EXAMPLES_SRC src/examples)
+set(IS_EXAMPLE TRUE)
 
 # Find Seastar package
 find_package(Seastar REQUIRED)
@@ -16,23 +18,81 @@ find_package(Seastar REQUIRED)
 # Add global compile definitions for all targets
 add_compile_definitions(SEASTAR_SCHEDULING_GROUPS_COUNT=16)
 
-# Add executables for all cpp files
-add_executable(simplest
-  ${SRC}/simplest.cpp)
-add_executable(continuation
-  ${SRC}/contiuation.cpp)
-add_executable(parasleep
-  ${SRC}/boilerplate.cpp
-  ${SRC}/parasleep.cpp)
+# Add bootstrap library
+add_library(bootstrap
+  ${SRC}/bootstrap/unique_id_exchange.cpp
+  ${SRC}/bootstrap/unique_id_server.cpp
+  ${SRC}/bootstrap/unique_id_client.cpp)
+target_link_libraries(bootstrap Seastar::seastar)
 
-add_executable(fast_vfuture
-  ${SRC}/boilerplate.cpp
-  ${SRC}/fast_vfuture.cpp)
-add_executable(slow_vfuture
-  ${SRC}/boilerplate.cpp
-  ${SRC}/slow_vfuture.cpp)
-add_executable(generator
-  ${SRC}/generator.cpp)
+# Add executables for all cpp files
+if(IS_EXAMPLE)
+  # Use examples directory
+  add_executable(simplest
+    ${EXAMPLES_SRC}/simplest.cpp)
+  add_executable(continuation
+    ${EXAMPLES_SRC}/contiuation.cpp)
+  add_executable(parasleep
+    ${EXAMPLES_SRC}/boilerplate.cpp
+    ${EXAMPLES_SRC}/parasleep.cpp)
+
+  add_executable(fast_vfuture
+    ${EXAMPLES_SRC}/boilerplate.cpp
+    ${EXAMPLES_SRC}/fast_vfuture.cpp)
+  add_executable(slow_vfuture
+    ${EXAMPLES_SRC}/boilerplate.cpp
+    ${EXAMPLES_SRC}/slow_vfuture.cpp)
+  add_executable(generator
+    ${EXAMPLES_SRC}/generator.cpp)
+
+  # Add our unique_id_exchange example
+  add_executable(unique_id_exchange_example
+    ${EXAMPLES_SRC}/unique_id_exchange_example.cpp)
+  target_link_libraries(unique_id_exchange_example bootstrap)
+
+  # Add simple server and client examples
+  add_executable(simple_server
+    ${EXAMPLES_SRC}/simple_server.cpp)
+  target_link_libraries(simple_server bootstrap)
+
+  add_executable(simple_client
+    ${EXAMPLES_SRC}/simple_client.cpp)
+  target_link_libraries(simple_client bootstrap)
+
+  # Add TCP server and client examples
+  add_executable(tcp_server
+    ${EXAMPLES_SRC}/tcp_server.cpp)
+  target_link_libraries(tcp_server bootstrap)
+
+  add_executable(tcp_client
+    ${EXAMPLES_SRC}/tcp_client.cpp)
+  target_link_libraries(tcp_client bootstrap)
+
+else()
+  # Use regular source directory
+  add_executable(simplest
+    ${SRC}/simplest.cpp)
+  add_executable(continuation
+    ${SRC}/contiuation.cpp)
+  add_executable(parasleep
+    ${SRC}/boilerplate.cpp
+    ${SRC}/parasleep.cpp)
+
+  add_executable(fast_vfuture
+    ${SRC}/boilerplate.cpp
+    ${SRC}/fast_vfuture.cpp)
+  add_executable(slow_vfuture
+    ${SRC}/boilerplate.cpp
+    ${SRC}/slow_vfuture.cpp)
+  add_executable(generator
+    ${SRC}/generator.cpp)
+
+  # Add our unique_id_exchange example
+  add_executable(unique_id_exchange_example
+    ${SRC}/examples/unique_id_exchange_example.cpp)
+  target_link_libraries(unique_id_exchange_example bootstrap)
+
+endif()
 
 # Link Seastar to all executables
 target_link_libraries(simplest Seastar::seastar)
@@ -44,6 +104,9 @@ target_link_libraries(slow_vfuture Seastar::seastar)
 
 # Add additional flags that might be needed for linking
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--no-as-needed")
+
+# Add include directories
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Print Seastar information for debugging
 # message(STATUS "Seastar include dirs: ${Seastar_INCLUDE_DIRS}")

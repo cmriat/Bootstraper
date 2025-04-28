@@ -30,6 +30,7 @@ CompileFlags:
     - "-Wno-maybe-uninitialized"
     - "-Wno-error=unused-result"
     - "-std=c++23"
+    - "-I/root/kernel_dev/server_dev/include"
     - "-I/root/kernel_dev/server_dev/.pixi/envs/default/include/"
     - "-I/root/kernel_dev/server_dev/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++"
     - "-I/root/kernel_dev/server_dev/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++/x86_64-conda-linux-gnu"
