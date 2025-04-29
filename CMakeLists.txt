@@ -68,6 +68,21 @@ if(IS_EXAMPLE)
     ${EXAMPLES_SRC}/tcp_client.cpp)
   target_link_libraries(tcp_client bootstrap)
 
+  # Add do_with example
+  add_executable(do_with_example
+    ${EXAMPLES_SRC}/do_with_example.cpp)
+  target_link_libraries(do_with_example Seastar::seastar)
+
+  # Add echo server examples
+  add_executable(echo_server
+    ${EXAMPLES_SRC}/echo_server.cpp)
+  target_link_libraries(echo_server Seastar::seastar)
+
+  # Add coroutine-based echo server example
+  add_executable(echo_server_corr
+    ${EXAMPLES_SRC}/echo_server_corr.cpp)
+  target_link_libraries(echo_server_corr Seastar::seastar)
+
 else()
   # Use regular source directory
   add_executable(simplest
