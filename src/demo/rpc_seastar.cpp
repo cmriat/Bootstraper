@@ -21,6 +21,8 @@
 
 #include "rpc/rpc_serializer.hpp"
 #include "rpc/rpc_benchmark_utils.hpp"
+#include "rpc/rpc_client.hpp"
+#include "rpc/rpc_server.hpp"
 
 using namespace seastar;
 using namespace std::chrono_literals;
@@ -28,64 +30,51 @@ using namespace rpc_benchmark;
 
 static seastar::logger rpc_logger("rpc_benchmark");
 
-static std::shared_ptr<rpc::protocol<rpc_serializer>> global_proto;
-
-static std::unique_ptr<rpc::protocol<rpc_serializer>::server> server;
+// Global server instance
+static rpc_server server(10000);
 
 // Server function
 future<> run_server(uint16_t port) {
     fmt::print("Starting RPC benchmark server on port {}\n", port);
 
-    if (!global_proto) {
-        global_proto = std::make_shared<rpc::protocol<rpc_serializer>>(rpc_serializer{});
-        global_proto->set_logger(&rpc_logger);
+    // Update server port if needed
+    if (port != 10000) {
+        server = rpc_server(port);
     }
 
-    // Register echo handler - simply returns the payload it receives
-    global_proto->register_handler(1, [] (sstring payload) {
-        return payload;
-    });
+    // Start the server
+    return server.start().then([] {
+        fmt::print("Listening for connections...\n");
+        fmt::print("Press Ctrl+C to stop the server\n");
 
-    // Set up resource limits
-    rpc::resource_limits limits;
-    limits.bloat_factor = 1;
-    limits.basic_request_size = 0;
-    limits.max_memory = 10'000'000;
-
-    server = std::make_unique<rpc::protocol<rpc_serializer>::server>(
-        *global_proto, rpc::server_options{}, ipv4_addr{port}, limits);
-
-    fmt::print("Listening for connections...\n");
-    fmt::print("Press Ctrl+C to stop the server\n");
-
-    struct sigaction sa;
-    sa.sa_handler = [](int) {
-        static bool interrupted = false;
-        if (!interrupted) {
-            interrupted = true;
-            fmt::print("\nReceived Ctrl+C, stopping server...\n");
-        } else {
-            fmt::print("\nReceived second Ctrl+C, forcing exit...\n");
-            _exit(1);
-        }
-    };
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, nullptr);
-
-    return sleep(std::chrono::hours(24))
-        .finally([] {
-            fmt::print("Stopping server...\n");
-            return server->stop();
-        })
-        .handle_exception([](std::exception_ptr ep) {
-            try {
-                std::rethrow_exception(ep);
-            } catch (const std::exception& e) {
-                fmt::print("Server error: {}\n", e.what());
+        struct sigaction sa;
+        sa.sa_handler = [](int) {
+            static bool interrupted = false;
+            if (!interrupted) {
+                interrupted = true;
+                fmt::print("\nReceived Ctrl+C, stopping server...\n");
+            } else {
+                fmt::print("\nReceived second Ctrl+C, forcing exit...\n");
+                _exit(1);
             }
-            return make_ready_future<>();
-        });
+        };
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = 0;
+        sigaction(SIGINT, &sa, nullptr);
+
+        // Keep the server running
+        return sleep(std::chrono::hours(24));
+    }).finally([] {
+        fmt::print("Stopping server...\n");
+        return server.stop();
+    }).handle_exception([](std::exception_ptr ep) {
+        try {
+            std::rethrow_exception(ep);
+        } catch (const std::exception& e) {
+            fmt::print("Server error: {}\n", e.what());
+        }
+        return make_ready_future<>();
+    });
 }
 
 
@@ -96,53 +85,42 @@ future<> run_client(sstring server_addr, uint16_t port, uint32_t payload_size, u
     fmt::print("Payload size: {} bytes, Requests: {}, Concurrency: {}\n",
               payload_size, num_requests, concurrency);
 
-    if (!global_proto) {
-        global_proto = std::make_shared<rpc::protocol<rpc_serializer>>(rpc_serializer{});
-        global_proto->set_logger(&rpc_logger);
-    }
-
-    fmt::print("Attempting to connect to {}:{}\n", server_addr, port);
-
-    static std::unique_ptr<rpc::protocol<rpc_serializer>::client> client;
-    rpc::client_options co;
-    client = std::make_unique<rpc::protocol<rpc_serializer>::client>(
-        *global_proto, co, ipv4_addr{server_addr, port});
-
     return do_with(
+        rpc_client{},
+        std::vector<uint64_t>{},
         sstring(uninitialized_string(payload_size)),
-        std::vector<uint64_t>(),
-        [num_requests, concurrency, payload_size](auto& test_payload, auto& latencies) {
-            fmt::print("Client created successfully\n");
-
-            auto echo_client = global_proto->template make_client<future<sstring> (sstring)>(1);
-
-            fmt::print("Echo client function created\n");
-
+        [=](auto& client, auto& latencies, auto& test_payload) {
+            // Fill payload with data
             std::fill(test_payload.begin(), test_payload.end(), 'x');
 
+            // Reserve space for latencies
             latencies.reserve(num_requests);
 
-            fmt::print("Test setup complete\n");
-            fmt::print("Connected to server, starting benchmark...\n");
+            fmt::print("Attempting to connect to {}:{}\n", server_addr, port);
 
-            return do_with(
-                semaphore(concurrency),
-                std::vector<future<>>(),
-                [&test_payload, &latencies, num_requests, payload_size](auto& limit, auto& futures) {
+            // Connect to server
+            return client.connect(server_addr, port).then([&] {
+                fmt::print("Client created successfully\n");
+                fmt::print("Test setup complete\n");
+                fmt::print("Connected to server, starting benchmark...\n");
+
+                // Create semaphore to limit concurrency
+                return do_with(semaphore(concurrency), [&](auto& limit) {
+                    // Create a vector of futures
+                    std::vector<future<>> futures;
                     futures.reserve(num_requests);
 
+                    // Launch all requests
                     for (uint32_t i = 0; i < num_requests; i++) {
-                        auto fut = with_semaphore(limit, 1, [&test_payload, &latencies]() {
+                        auto fut = with_semaphore(limit, 1, [&client, &test_payload, &latencies]() {
                             auto start = std::chrono::high_resolution_clock::now();
 
-                            auto echo_func = global_proto->template make_client<future<sstring> (sstring)>(1);
-                            return echo_func(*client, test_payload)
+                            return client.echo(test_payload)
                                 .then([&latencies, start](sstring) {
                                     auto end = std::chrono::high_resolution_clock::now();
                                     auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
                                         end - start).count();
                                     latencies.push_back(latency);
-                                    return make_ready_future<>();
                                 })
                                 .handle_exception([](std::exception_ptr ep) {
                                     try {
@@ -150,27 +128,28 @@ future<> run_client(sstring server_addr, uint16_t port, uint32_t payload_size, u
                                     } catch (const std::exception& e) {
                                         fmt::print("Request failed: {}\n", e.what());
                                     }
-                                    return make_ready_future<>();
                                 });
                         });
                         futures.push_back(std::move(fut));
                     }
 
+                    // Wait for all futures to complete
                     return when_all(futures.begin(), futures.end()).discard_result()
                         .then([&latencies, payload_size]() {
                             if (latencies.empty()) {
                                 fmt::print("No successful requests completed\n");
-                            } else {
-                                auto percentiles = calculate_percentiles(latencies);
-                                print_benchmark_results(payload_size, percentiles);
+                                return make_ready_future<>();
                             }
+
+                            // Calculate and print results
+                            auto percentiles = calculate_percentiles(latencies);
+                            print_benchmark_results(payload_size, percentiles);
 
                             return make_ready_future<>();
                         });
-                }
-            ).finally([] {
-                fmt::print("Stopping client...\n");
-                return client->stop();
+                });
+            }).finally([&client] {
+                return client.stop();
             });
         }
     ).handle_exception([](std::exception_ptr ep) {

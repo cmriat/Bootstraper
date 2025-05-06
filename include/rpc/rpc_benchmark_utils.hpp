@@ -35,11 +35,11 @@ inline std::unordered_map<std::string, uint64_t> calculate_percentiles(std::vect
 // Print benchmark results in a nice format
 inline void print_benchmark_results(size_t payload_size, const std::unordered_map<std::string, uint64_t>& percentiles) {
     fmt::print("\n{} byte payload\tlatency (microseconds)\n", payload_size);
-    fmt::print("p50\t{}\n", percentiles.at("p50"));
-    fmt::print("p90\t{}\n", percentiles.at("p90"));
-    fmt::print("p99\t{}\n", percentiles.at("p99"));
-    fmt::print("p9999\t{}\n", percentiles.at("p9999"));
-    fmt::print("p100\t{}\n", percentiles.at("p100"));
+    fmt::print("p50\t{} us\n", percentiles.at("p50"));
+    fmt::print("p90\t{} us\n", percentiles.at("p90"));
+    fmt::print("p99\t{} us\n", percentiles.at("p99"));
+    fmt::print("p9999\t{} us\n", percentiles.at("p9999"));
+    fmt::print("p100\t{} us\n", percentiles.at("p100"));
 }
 
 } // namespace rpc_benchmark
