@@ -1,0 +1,219 @@
+RPC Benchmark Results - Tue May  6 12:36:36 UTC 2025
+Server Address: 10.80.178.28
+=======================================
+
+Using remote server at 10.80.178.28
+Running benchmark tests...
+
+Running test with payload_size=60, requests=1000, concurrency=10
+--------------------------------------
+INFO  2025-05-06 12:36:36,490 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:36,952 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 1000, Concurrency: 10
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	140 us
+p90	418 us
+p99	1972 us
+p9999	1990 us
+p100	1990 us
+
+
+Running test with payload_size=1024, requests=1000, concurrency=10
+--------------------------------------
+INFO  2025-05-06 12:36:37,590 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:38,036 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 1024 bytes, Requests: 1000, Concurrency: 10
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+1024 byte payload	latency (microseconds)
+p50	147 us
+p90	192 us
+p99	1176 us
+p9999	1193 us
+p100	1193 us
+
+
+Running test with payload_size=4096, requests=1000, concurrency=10
+--------------------------------------
+INFO  2025-05-06 12:36:38,897 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:39,405 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 4096 bytes, Requests: 1000, Concurrency: 10
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+4096 byte payload	latency (microseconds)
+p50	227 us
+p90	383 us
+p99	1879 us
+p9999	2429 us
+p100	2429 us
+
+
+Running test with payload_size=60, requests=1000, concurrency=1
+--------------------------------------
+INFO  2025-05-06 12:36:40,149 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:40,630 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 1000, Concurrency: 1
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	102 us
+p90	121 us
+p99	198 us
+p9999	7460 us
+p100	7460 us
+
+
+Running test with payload_size=60, requests=1000, concurrency=4
+--------------------------------------
+INFO  2025-05-06 12:36:41,542 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:42,007 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 1000, Concurrency: 4
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	102 us
+p90	208 us
+p99	479 us
+p9999	1505 us
+p100	1505 us
+
+
+Running test with payload_size=60, requests=1000, concurrency=16
+--------------------------------------
+INFO  2025-05-06 12:36:43,080 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:43,608 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 1000, Concurrency: 16
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	189 us
+p90	230 us
+p99	2348 us
+p9999	2368 us
+p100	2368 us
+
+
+Running test with payload_size=60, requests=1000, concurrency=32
+--------------------------------------
+INFO  2025-05-06 12:36:44,398 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:44,874 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 1000, Concurrency: 32
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	130 us
+p90	168 us
+p99	4504 us
+p9999	4522 us
+p100	4522 us
+
+
+Running test with payload_size=60, requests=1000, concurrency=64
+--------------------------------------
+INFO  2025-05-06 12:36:45,593 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:46,040 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 1000, Concurrency: 64
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	138 us
+p90	187 us
+p99	1055 us
+p9999	1066 us
+p100	1066 us
+
+
+Running test with payload_size=60, requests=1000, concurrency=128
+--------------------------------------
+INFO  2025-05-06 12:36:46,778 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:47,264 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 1000, Concurrency: 128
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	364 us
+p90	2093 us
+p99	2145 us
+p9999	2158 us
+p100	2158 us
+
+
+Running test with payload_size=60, requests=100, concurrency=10
+--------------------------------------
+INFO  2025-05-06 12:36:47,886 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:48,369 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 100, Concurrency: 10
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	159 us
+p90	1817 us
+p99	1824 us
+p9999	1824 us
+p100	1824 us
+
+
+Running test with payload_size=60, requests=10000, concurrency=10
+--------------------------------------
+INFO  2025-05-06 12:36:48,982 seastar - Reactor backend: io_uring
+INFO  2025-05-06 12:36:49,451 seastar - Perf-based stall detector creation failed (EACCESS), try setting /proc/sys/kernel/perf_event_paranoid to 1 or less to enable kernel backtraces: falling back to posix timer.
+Starting RPC benchmark client, connecting to 10.80.178.28:10000
+Payload size: 60 bytes, Requests: 10000, Concurrency: 10
+Attempting to connect to 10.80.178.28:10000
+Client created successfully
+Test setup complete
+Connected to server, starting benchmark...
+
+60 byte payload	latency (microseconds)
+p50	90 us
+p90	131 us
+p99	208 us
+p9999	5446 us
+p100	5446 us
+
+
+
+Benchmark completed.
+Results saved to logs/rpc_benchmark.txt
