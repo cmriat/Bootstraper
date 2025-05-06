@@ -5,3 +5,6 @@
 
 # Build directory
 build/
+
+# Cache directory
+.cache/
