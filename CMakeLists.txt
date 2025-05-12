@@ -127,3 +127,9 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 # message(STATUS "Seastar include dirs: ${Seastar_INCLUDE_DIRS}")
 # message(STATUS "Seastar libraries: ${Seastar_LIBRARIES}")
 # message(STATUS "Seastar definitions: ${Seastar_DEFINITIONS}")
+
+# Add UCXX test directory
+option(BUILD_UCXX_TEST "Build UCXX installation test" ON)
+if(BUILD_UCXX_TEST)
+  add_subdirectory(${SRC}/ucxx)
+endif()

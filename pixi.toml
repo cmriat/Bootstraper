@@ -14,7 +14,7 @@ cuda = "12.7"
 [tasks]
 
 [dependencies]
-cuda = "12.6.*"
+cuda = "12.8.*"
 cxx-compiler = "*"
 c-compiler = "*"
 python = "3.10.*"
@@ -48,3 +48,4 @@ pkg-config = ">=0.29.2,<0.30"
 libprotobuf = ">=6.30.2,<6.30.3.0a0"
 dpdk-dev = "23.7.*"
 seastar-dev = ">=2025.4.24,<2026"
+ucxx = ">=0.45,<0.46"
