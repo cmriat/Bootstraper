@@ -133,3 +133,55 @@ option(BUILD_UCXX_TEST "Build UCXX installation test" ON)
 if(BUILD_UCXX_TEST)
   add_subdirectory(${SRC}/ucxx)
 endif()
+
+# Find UCXX package for demo
+option(BUILD_UCXX_DEMO "Build UCXX Seastar demo" ON)
+if(BUILD_UCXX_DEMO)
+  # Find UCX package
+  find_package(ucx REQUIRED)
+
+  # Find UCXX package
+  find_package(ucxx REQUIRED)
+
+  # Add RDMA Seastar demo
+  add_executable(rdma_seastar_demo
+    ${SRC}/demo/endpoint_manager.cpp
+    ${SRC}/demo/rdma_server.cpp
+    ${SRC}/demo/rdma_client.cpp
+    ${SRC}/demo/rdma_seastar_demo.cpp)
+
+  target_link_libraries(rdma_seastar_demo
+    Seastar::seastar
+    ucxx::ucxx)
+
+  # Set output directory
+  set_target_properties(rdma_seastar_demo
+    PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+  # Add RPC benchmark from src/rpc
+  add_executable(rpc_benchmark
+    ${SRC}/rpc/rpc_seastar.cpp)
+
+  target_link_libraries(rpc_benchmark
+    Seastar::seastar)
+
+  set_target_properties(rpc_benchmark
+    PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+  # Add simple RDMA/RPC benchmark
+  option(BUILD_SIMPLE_BENCHMARK "Build simple RDMA/RPC benchmark" ON)
+  if(BUILD_SIMPLE_BENCHMARK)
+    add_executable(simple_benchmark
+      ${SRC}/demo/endpoint_manager.cpp
+      ${SRC}/demo/rdma_server.cpp
+      ${SRC}/demo/rdma_client.cpp
+      ${SRC}/demo/simple_benchmark.cpp)
+
+    target_link_libraries(simple_benchmark
+      Seastar::seastar
+      ucxx::ucxx)
+
+    set_target_properties(simple_benchmark
+      PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+  endif()
+endif()
