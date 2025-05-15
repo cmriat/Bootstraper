@@ -21,9 +21,9 @@ struct RemoteMemoryRegion {
     size_t size;
     std::vector<char> rkey_buffer;
     ucp_rkey_h rkey;
-    
+
     RemoteMemoryRegion() : addr(0), size(0), rkey(nullptr) {}
-    
+
     ~RemoteMemoryRegion() {
         if (rkey) {
             ucp_rkey_destroy(rkey);
@@ -42,49 +42,71 @@ private:
     EndpointManager _endpoint_manager;
     std::shared_ptr<ucxx::Endpoint> _ucxx_endpoint;
     std::unique_ptr<RemoteMemoryRegion> _remote_memory;
+    std::string _client_id;  // Client identifier for P2P communication
 
 public:
-    RdmaClient() 
-        : _proto(rpc_benchmark::rpc_serializer{}), 
-          _server_rpc_port(0), 
-          _server_ucxx_port(0) {}
-    
+    RdmaClient(const std::string& client_id = "client")
+        : _proto(rpc_benchmark::rpc_serializer{}),
+          _server_rpc_port(0),
+          _server_ucxx_port(0),
+          _client_id(client_id) {}
+
     ~RdmaClient() {
         stop().get();
     }
-    
+
     // Initialize the client
     bool initialize();
-    
+
     // Connect to the server
     seastar::future<> connect(seastar::sstring server_addr, uint16_t server_port);
-    
+
     // Get remote memory region information
     seastar::future<bool> getRemoteMemoryInfo();
-    
+
     // Create UCXX endpoint to the server
     seastar::future<bool> createUCXXEndpoint();
-    
+
     // Perform RDMA write operation
     seastar::future<bool> rdmaWrite(const void* local_data, size_t size, uint64_t remote_offset = 0);
-    
+
     // Perform RDMA read operation
     seastar::future<bool> rdmaRead(void* local_data, size_t size, uint64_t remote_offset = 0);
-    
+
     // Echo test (for testing RPC)
     seastar::future<seastar::sstring> echo(seastar::sstring payload);
-    
+
     // Stop the client
     seastar::future<> stop();
-    
+
     // Get the remote memory region
     RemoteMemoryRegion* getRemoteMemory() {
         return _remote_memory.get();
     }
-    
+
     // Get the endpoint manager
     EndpointManager& getEndpointManager() {
         return _endpoint_manager;
+    }
+
+    // Get the client ID
+    const std::string& getClientId() const {
+        return _client_id;
+    }
+
+    // Set the client ID
+    void setClientId(const std::string& client_id) {
+        _client_id = client_id;
+    }
+
+    // Get the server address
+    const seastar::sstring& getServerAddr() const {
+        return _server_addr;
+    }
+
+    // Get the server RPC port
+    uint16_t getServerPort() const {
+        return _server_rpc_port;
     }
 };
 

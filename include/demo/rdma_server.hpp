@@ -21,14 +21,14 @@ struct MemoryRegion {
     void* addr;
     size_t size;
     ucp_mem_h mem_handle;
-    ucp_rkey_buffer_h rkey_buffer;
+    void* packed_rkey;
     std::string rkey_str;
-    
-    MemoryRegion() : addr(nullptr), size(0), mem_handle(nullptr), rkey_buffer(nullptr) {}
-    
+
+    MemoryRegion() : addr(nullptr), size(0), mem_handle(nullptr), packed_rkey(nullptr) {}
+
     ~MemoryRegion() {
-        if (rkey_buffer) {
-            ucp_rkey_buffer_release(rkey_buffer);
+        if (packed_rkey) {
+            ucp_rkey_buffer_release(packed_rkey);
         }
         if (mem_handle) {
             ucp_mem_unmap(nullptr, mem_handle);
@@ -48,69 +48,82 @@ private:
     uint16_t _ucxx_port;
     EndpointManager _endpoint_manager;
     std::shared_ptr<ucxx::Listener> _listener;
+    // Map of memory regions by client ID
+    std::unordered_map<std::string, std::unique_ptr<MemoryRegion>> _client_memory_regions;
+
+    // Default memory region for backward compatibility
     std::unique_ptr<MemoryRegion> _memory_region;
-    
+
     // Listener context for handling connection requests
     class ListenerContext {
     private:
         RdmaServer* _server;
         std::shared_ptr<ucxx::Endpoint> _endpoint;
-        
+
     public:
         explicit ListenerContext(RdmaServer* server) : _server(server), _endpoint(nullptr) {}
-        
+
         ~ListenerContext() {
             releaseEndpoint();
         }
-        
+
         bool isAvailable() const {
             return _endpoint == nullptr;
         }
-        
+
         void createEndpointFromConnRequest(ucp_conn_request_h conn_request);
-        
+
         void releaseEndpoint() {
             _endpoint.reset();
         }
-        
+
         std::shared_ptr<ucxx::Endpoint> getEndpoint() {
             return _endpoint;
         }
     };
-    
+
     std::unique_ptr<ListenerContext> _listener_ctx;
-    
+
     // Static callback for UCXX listener
     static void listenerCallback(ucp_conn_request_h conn_request, void* arg);
 
 public:
     RdmaServer(uint16_t rpc_port, uint16_t ucxx_port)
-        : _proto(rpc_benchmark::rpc_serializer{}), 
-          _rpc_port(rpc_port), 
+        : _proto(rpc_benchmark::rpc_serializer{}),
+          _rpc_port(rpc_port),
           _ucxx_port(ucxx_port),
           _listener_ctx(std::make_unique<ListenerContext>(this)) {}
-    
+
     ~RdmaServer() {
         stop().get();
     }
-    
+
     // Initialize the server
     bool initialize();
-    
-    // Allocate memory for RDMA operations
+
+    // Allocate memory for RDMA operations (legacy method)
     bool allocateMemory(size_t size);
-    
+
+    // Allocate memory for a specific client
+    bool allocateClientMemory(const std::string& client_id, size_t size);
+
+    // Get memory region for a specific client
+    MemoryRegion* getClientMemoryRegion(const std::string& client_id);
+
+    // Release memory region for a specific client
+    bool releaseClientMemory(const std::string& client_id);
+
     // Start the server
     seastar::future<> start();
-    
+
     // Stop the server
     seastar::future<> stop();
-    
-    // Get the memory region
+
+    // Get the memory region (legacy method)
     MemoryRegion* getMemoryRegion() {
         return _memory_region.get();
     }
-    
+
     // Get the endpoint manager
     EndpointManager& getEndpointManager() {
         return _endpoint_manager;
