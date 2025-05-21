@@ -1,6 +1,6 @@
 CompileFlags:
-  CompilationDatabase: /root/kernel_dev/bootstraper
-  Compiler: /root/kernel_dev/bootstraper/.pixi/envs/default/bin/clang++
+  CompilationDatabase: /root/kernel_dev/Bootstraper
+  Compiler: /root/kernel_dev/Bootstraper/.pixi/envs/default/bin/clang++
   Add:
     - "-Xclang"
     # - "compile-commands-dir=/root/kernel_dev/server_dev/build/compile_commands.json"
@@ -21,13 +21,14 @@ CompileFlags:
     - "-Wno-maybe-uninitialized"
     - "-Wno-error=unused-result"
     - "-std=c++23"
-    - "-I/root/kernel_dev/bootstraper/include"
-    - "-I/root/kernel_dev/bootstraper/include/rpc"
-    - "-I/root/kernel_dev/bootstraper/include/coucxx"
-    - "-I/root/kernel_dev/bootstraper/.pixi/envs/default/include/"
-    - "-I/root/kernel_dev/bootstraper/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++"
-    - "-I/root/kernel_dev/bootstraper/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++/x86_64-conda-linux-gnu"
-    - "-I/root/kernel_dev/bootstraper/.pixi/envs/default/targets/x86_64-linux/include"
+    - "-I/root/kernel_dev/Bootstraper/include"
+    - "-I/root/kernel_dev/Bootstraper/include/rpc"
+    - "-I/root/kernel_dev/Bootstraper/include/coucxx"
+    - "-I/root/kernel_dev/Bootstraper/include/tensor"
+    - "-I/root/kernel_dev/Bootstraper/.pixi/envs/default/include/"
+    - "-I/root/kernel_dev/Bootstraper/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++"
+    - "-I/root/kernel_dev/Bootstraper/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++/x86_64-conda-linux-gnu"
+    - "-I/root/kernel_dev/Bootstraper/.pixi/envs/default/targets/x86_64-linux/include"
 
   Remove: 
     - "-resource-dir.*"

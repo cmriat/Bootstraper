@@ -41,8 +41,7 @@ class ListenerContext {
 
   bool isAvailable() const { return _endpoint == nullptr; }
 
-  void createEndpointFromConnRequest(ucp_conn_request_h conn_request)
-  {
+  void createEndpointFromConnRequest(ucp_conn_request_h conn_request) {
     if (!isAvailable()) throw std::runtime_error("Listener context already has an endpoint");
 
     static bool endpoint_error_handling = true;
@@ -52,8 +51,7 @@ class ListenerContext {
   void releaseEndpoint() { _endpoint.reset(); }
 };
 
-static void listener_cb(ucp_conn_request_h conn_request, void* arg)
-{
+static void listener_cb(ucp_conn_request_h conn_request, void* arg) {
   char ip_str[INET6_ADDRSTRLEN];
   char port_str[INET6_ADDRSTRLEN];
   ucp_conn_request_attr_t attr{};
@@ -78,8 +76,7 @@ static void listener_cb(ucp_conn_request_h conn_request, void* arg)
   }
 }
 
-static void printUsage()
-{
+static void printUsage() {
   std::cerr << "Usage: ucxx_test [parameters]" << std::endl;
   std::cerr << " UCXX installation test example" << std::endl;
   std::cerr << std::endl;
@@ -93,8 +90,7 @@ static void printUsage()
   std::cerr << std::endl;
 }
 
-ucs_status_t parseCommand(int argc, char* const argv[])
-{
+ucs_status_t parseCommand(int argc, char* const argv[]) {
   int c;
   while ((c = getopt(argc, argv, "m:p:h")) != -1) {
     switch (c) {
@@ -134,8 +130,7 @@ ucs_status_t parseCommand(int argc, char* const argv[])
 }
 
 std::function<void()> getProgressFunction(std::shared_ptr<ucxx::Worker> worker,
-                                          ProgressMode progressMode)
-{
+                                          ProgressMode progressMode) {
   switch (progressMode) {
     case ProgressMode::Polling: return std::bind(std::mem_fn(&ucxx::Worker::progress), worker);
     case ProgressMode::Blocking:
@@ -147,8 +142,7 @@ std::function<void()> getProgressFunction(std::shared_ptr<ucxx::Worker> worker,
 
 void waitRequests(ProgressMode progressMode,
                   std::shared_ptr<ucxx::Worker> worker,
-                  const std::vector<std::shared_ptr<ucxx::Request>>& requests)
-{
+                  const std::vector<std::shared_ptr<ucxx::Request>>& requests) {
   auto progress = getProgressFunction(worker, progressMode);
   for (auto& r : requests) {
     while (!r->isCompleted())
@@ -157,8 +151,7 @@ void waitRequests(ProgressMode progressMode,
   }
 }
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
   if (parseCommand(argc, argv) != UCS_OK) return -1;
 
   std::cout << "UCXX Installation Test" << std::endl;

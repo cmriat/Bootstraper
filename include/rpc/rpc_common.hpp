@@ -9,6 +9,7 @@
 #include <seastar/util/log.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/rpc/rpc_types.hh>
+#include <ucxx/buffer.h>
 
 using namespace seastar;
 using namespace std::chrono_literals;
@@ -52,10 +53,126 @@ inline sstring read(serializer, Input& in, rpc::type<sstring>) {
     return ret;
 }
 
-// 0 for sleep, 1 for echo
+// Use UCXX's BufferType
+using BufferType = ucxx::BufferType;
+
+enum class DataType : uint32_t {
+    INT8 = 0,
+    INT16 = 1,
+    INT32 = 2,
+    INT64 = 3,
+    UINT8 = 4,
+    UINT16 = 5,
+    UINT32 = 6,
+    UINT64 = 7,
+    FLOAT16 = 8,
+    FLOAT32 = 9,
+    FLOAT64 = 10,
+};
+
+struct TensorSpec {
+    BufferType buffer_type;
+    DataType data_type;
+    std::vector<size_t> shape;
+
+    size_t total_bytes() const {
+        size_t element_count = 1;
+        for (auto dim : shape) {
+            element_count *= dim;
+        }
+
+        size_t element_size = 0;
+        switch (data_type) {
+            case DataType::INT8:
+            case DataType::UINT8:
+                element_size = 1;
+                break;
+            case DataType::INT16:
+            case DataType::UINT16:
+            case DataType::FLOAT16:
+                element_size = 2;
+                break;
+            case DataType::INT32:
+            case DataType::UINT32:
+            case DataType::FLOAT32:
+                element_size = 4;
+                break;
+            case DataType::INT64:
+            case DataType::UINT64:
+            case DataType::FLOAT64:
+                element_size = 8;
+                break;
+        }
+
+        return element_count * element_size;
+    }
+};
+
+// serialization for BufferType
+template <typename Output>
+inline void write(serializer, Output& out, const BufferType& v) {
+    write_arithmetic_type(out, static_cast<uint32_t>(v));
+}
+
+template <typename Input>
+inline BufferType read(serializer, Input& in, rpc::type<BufferType>) {
+    return static_cast<BufferType>(read_arithmetic_type<uint32_t>(in));
+}
+
+// serialization for DataType
+template <typename Output>
+inline void write(serializer, Output& out, const DataType& v) {
+    write_arithmetic_type(out, static_cast<uint32_t>(v));
+}
+
+template <typename Input>
+inline DataType read(serializer, Input& in, rpc::type<DataType>) {
+    return static_cast<DataType>(read_arithmetic_type<uint32_t>(in));
+}
+
+// serialization for std::vector<size_t>
+template <typename Output>
+inline void write(serializer, Output& out, const std::vector<size_t>& v) {
+    write_arithmetic_type(out, uint32_t(v.size()));
+    for (auto& item : v) {
+        write_arithmetic_type(out, item);
+    }
+}
+
+template <typename Input>
+inline std::vector<size_t> read(serializer, Input& in, rpc::type<std::vector<size_t>>) {
+    auto size = read_arithmetic_type<uint32_t>(in);
+    std::vector<size_t> ret;
+    ret.reserve(size);
+    for (uint32_t i = 0; i < size; ++i) {
+        ret.push_back(read_arithmetic_type<size_t>(in));
+    }
+    return ret;
+}
+
+// serialization for TensorSpec
+template <typename Output>
+inline void write(serializer, Output& out, const TensorSpec& v) {
+    write(serializer{}, out, v.buffer_type);
+    write(serializer{}, out, v.data_type);
+    write(serializer{}, out, v.shape);
+}
+
+template <typename Input>
+inline TensorSpec read(serializer, Input& in, rpc::type<TensorSpec>) {
+    TensorSpec ret;
+    ret.buffer_type = read(serializer{}, in, rpc::type<BufferType>{});
+    ret.data_type = read(serializer{}, in, rpc::type<DataType>{});
+    ret.shape = read(serializer{}, in, rpc::type<std::vector<size_t>>{});
+    return ret;
+}
+
+// 0 for sleep, 1 for echo, 2 for goodbye, 3 for tensor creation
 enum class msg_type : uint32_t {
     SLEEP_MS = 0,
     ECHO = 1,
+    GOODBYE = 2,
+    CREATE_TENSOR = 3,
 };
 
 template <typename Enum>
@@ -102,11 +219,11 @@ public:
 
 class rpc_context {
 public:
-    static protocol_type& get_protocol() { 
+    static protocol_type& get_protocol() {
         static protocol_type slp_rpc(serializer{});
         return slp_rpc;
     }
-    static slp_comp& get_compressor() { 
+    static slp_comp& get_compressor() {
         static slp_comp mc;
         return mc;
     }

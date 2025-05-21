@@ -2,6 +2,7 @@ add_executable(rpc_sleep
     rpc_runner.cpp
     rpc_server.cpp
     rpc_client.cpp
+    tensor_coroutines.cpp
 )
 
 add_executable(rpc_example
@@ -14,12 +15,14 @@ target_link_libraries(rpc_sleep
     Seastar::seastar
     fmt::fmt
     Boost::program_options
+    ucxx::ucxx
 )
 
 target_link_libraries(rpc_example
     Seastar::seastar
     fmt::fmt
     Boost::program_options
+    ucxx::ucxx
 )
 
 target_compile_options(rpc_sleep PRIVATE -Wall -Wextra -Wno-unused-parameter)
