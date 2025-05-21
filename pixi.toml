@@ -1,52 +1,48 @@
 [workspace]
 authors = ["kozo <kozoYang@outlook.com>"]
-channels = [
-  "file:///root/.cache/prefix",
-  "https://prefix.dev/meta-forge",
-  "conda-forge",
+channels = ["rapidsai",
+            "https://prefix.dev/meta-forge",
+            "conda-forge"
 ]
-name = "server-dev"
+name = "bootstraper"
 platforms = ["linux-64"]
 version = "0.1.0"
+
 [system-requirements]
+libc = { family = "glibc", version = "2.34" }
 cuda = "12.7"
 
-[tasks]
-
 [dependencies]
-cuda = "12.8.*"
-cxx-compiler = "*"
-c-compiler = "*"
-python = "3.10.*"
-pip = "*"
-cmake = ">=4.0.0,<5"
-make = ">=4.4.1,<5"
-clangxx = ">=20.1.3,<21"
-sysroot_linux-64 = "2.34.*"
-rattler-build = ">=0.40.0,<0.41"
-fmt = ">=11.1.4,<12"
-yaml-cpp = ">=0.8.0,<0.9"
-lld = ">=20.1.3,<21"
+seastar-dev = "*"
 libboost-devel = ">=1.88.0,<2"
-cryptopp = ">=8.9.0,<9"
 gnutls = ">=3.8.9,<4"
-valgrind = ">=3.24.0,<4"
 liburing = ">=2.9,<3"
-libnuma = ">=2.0.18,<3"
 libhwloc = ">=2.11.2,<3"
-lz4 = ">=4.3.3,<5"
-libpciaccess = ">=0.18,<0.19"
+lksctp-tools = ">=1.0.21,<2"
+systemtap = ">=5.3,<6"
+libsctp-dev = ">=1.0.21,<2"
+yaml-cpp = ">=0.8.0,<0.9"
+lld = ">=20.1.5,<21"
+cryptopp = ">=8.9.0,<9"
+valgrind = ">=3.25.0,<4"
+libnuma = ">=2.0.18,<3"
 zlib = ">=1.3.1,<2"
+lz4 = ">=4.4.4,<5"
 ragel = ">=6.10,<7"
 stow = ">=2.3.1,<3"
-lksctp-tools = ">=1.0.21,<2"
-libsctp-dev = ">=1.0.21,<2"
 c-ares = ">=1.34.5,<2"
-systemtap-sdt-dev = ">=5.2,<6"
-xfslibs-dev = ">=6.13.0,<7"
-pkg-config = ">=0.29.2,<0.30"
-libprotobuf = ">=6.30.2,<6.30.3.0a0"
-dpdk-dev = "23.7.*"
-seastar-dev = ">=2025.4.24,<2026"
-ucxx = ">=0.45,<0.46"
-benchmark = ">=1.9.3,<2"
+xfslibs-dev = ">=6.14.0,<7"
+libprotobuf = "*"
+
+[target.linux-64.dependencies]
+cmake = "*"
+make = "*"
+cxx-compiler = "*"
+c-compiler = "*"
+rattler-build = "*"
+rmm = "*"
+cuda = "*"
+ucxx = "*"
+ucx = { channel = "conda-forge" }
+sysroot_linux-64 = "2.34.*"
+fmt = "*"

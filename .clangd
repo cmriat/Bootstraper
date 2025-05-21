@@ -1,10 +1,10 @@
 CompileFlags:
-  CompilationDatabase: /root/kernel_dev/server_dev
-  Compiler: /root/kernel_dev/server_dev/.pixi/envs/default/bin/clang++
+  CompilationDatabase: /root/kernel_dev/bootstraper
+  Compiler: /root/kernel_dev/bootstraper/.pixi/envs/default/bin/clang++
   Add:
     - "-Xclang"
     # - "compile-commands-dir=/root/kernel_dev/server_dev/build/compile_commands.json"
-    - "-D-DBOOST_PROGRAM_OPTIONS_DYN_LINK"
+    - "-DBOOST_PROGRAM_OPTIONS_DYN_LINK"
     - "-DBOOST_PROGRAM_OPTIONS_NO_LIB"
     - "-DBOOST_THREAD_DYN_LINK"
     - "-DBOOST_THREAD_NO_LIB"
@@ -17,24 +17,17 @@ CompileFlags:
     - "-DSEASTAR_LOGGER_TYPE_STDOUT"
     - "-DSEASTAR_SCHEDULING_GROUPS_COUNT=16"
     - "-DSEASTAR_SSTRING"
-    - "-fvisibility-inlines-hidden"
-    - "-fmessage-length=0"
-    - "-march=nocona"
-    - "-mtune=haswell"
-    - "-ftree-vectorize"
-    - "-fPIC"
-    - "-fstack-protector-strong"
-    - "-fno-plt"
-    - "-O2"
-    - "-ffunction-sections"
+    # - "-DSEASTAR_MODULE"
     - "-Wno-maybe-uninitialized"
     - "-Wno-error=unused-result"
     - "-std=c++23"
-    - "-I/root/kernel_dev/server_dev/include"
-    - "-I/root/kernel_dev/server_dev/.pixi/envs/default/include/"
-    - "-I/root/kernel_dev/server_dev/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++"
-    - "-I/root/kernel_dev/server_dev/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++/x86_64-conda-linux-gnu"
-    - "-I/root/kernel_dev/server_dev/.pixi/envs/default/targets/x86_64-linux/include"
+    - "-I/root/kernel_dev/bootstraper/include"
+    - "-I/root/kernel_dev/bootstraper/include/rpc"
+    - "-I/root/kernel_dev/bootstraper/include/coucxx"
+    - "-I/root/kernel_dev/bootstraper/.pixi/envs/default/include/"
+    - "-I/root/kernel_dev/bootstraper/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++"
+    - "-I/root/kernel_dev/bootstraper/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++/x86_64-conda-linux-gnu"
+    - "-I/root/kernel_dev/bootstraper/.pixi/envs/default/targets/x86_64-linux/include"
 
-  Remove:
+  Remove: 
     - "-resource-dir.*"

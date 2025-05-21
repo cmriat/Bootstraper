@@ -158,7 +158,7 @@ int main(int ac, char** av) {
                     printf("test8 timeout!\n");
                 }
             });
-            for (auto i = 0; i < 100; i++) {
+            for (auto i = 0; i < 1; i++) {
                 fmt::print("iteration={:d}\n", i);
                 (void)test1(*client, 5).then([] (){ fmt::print("test1 ended\n");});
                 (void)test2(*client, 1, 2).then([] (int r) { fmt::print("test2 got {:d}\n", r); });

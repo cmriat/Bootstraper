@@ -1,10 +1,5 @@
-
+/build
+/.history
 # pixi environments
 .pixi
 *.egg-info
-
-# Build directory
-build/
-
-# Cache directory
-.cache/

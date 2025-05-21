@@ -1,42 +1,36 @@
 cmake_minimum_required(VERSION 3.10)
-project(rdma_rpc_demo)
+project(rpc_demo)
 
-# Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build/bin)
 
-# Find packages
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(SEASTAR REQUIRED seastar)
-pkg_check_modules(FMT REQUIRED fmt)
-
-# Include directories
-include_directories(
-    ${CMAKE_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/include
-    ${SEASTAR_INCLUDE_DIRS}
-    ${FMT_INCLUDE_DIRS}
+add_definitions(
+    -DSEASTAR_SCHEDULING_GROUPS_COUNT=16
+    -DSEASTAR_API_LEVEL=7
+    -DBOOST_PROGRAM_OPTIONS_DYN_LINK
+    -DBOOST_PROGRAM_OPTIONS_NO_LIB
+    -DBOOST_THREAD_DYN_LINK
+    -DBOOST_THREAD_NO_LIB
+    -DFMT_SHARED
+    -DSEASTAR_API_LEVEL=7
+    -DSEASTAR_BUILD_SHARED_LIBS
+    -DSEASTAR_DEPRECATED_OSTREAM_FORMATTERS
+    -DSEASTAR_HAVE_DPDK
+    -DSEASTAR_LOGGER_COMPILE_TIME_FMT
+    -DSEASTAR_LOGGER_TYPE_STDOUT
+    -DSEASTAR_SCHEDULING_GROUPS_COUNT=16
+    -DSEASTAR_SSTRING
 )
 
-# Link directories
-link_directories(
-    ${SEASTAR_LIBRARY_DIRS}
-    ${FMT_LIBRARY_DIRS}
-)
+find_package(Boost REQUIRED COMPONENTS program_options)
+find_package(fmt REQUIRED)
+find_package(Threads REQUIRED)
+find_package(ucx REQUIRED)
+find_package(ucxx REQUIRED)
 
-# Add source files
-set(SOURCES
-    src/demo/endpoint_manager.cpp
-    src/demo/rdma_client.cpp
-    src/demo/rdma_server.cpp
-    src/demo/p2p_manager.cpp
-)
+find_package (Seastar REQUIRED)
 
-# Add executable
-add_executable(p2p_rdma_demo src/demo/p2p_rdma_demo.cpp ${SOURCES})
 
-# Link libraries
-target_link_libraries(p2p_rdma_demo ${SEASTAR_LIBRARIES} ${FMT_LIBRARIES} ucxx)
-
-# Set compiler flags
-target_compile_options(p2p_rdma_demo PRIVATE ${SEASTAR_CFLAGS} -Wall -Wextra)
+add_subdirectory(src/rpc)
+add_subdirectory(src/coucxx)

@@ -1,20 +1,16 @@
 /**
- * SPDX-FileCopyrightText: Copyright (c) 2023-2025, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <cassert>
-#include <chrono>
 #include <iostream>
 #include <memory>
-#include <numeric>
-#include <thread>
 #include <unistd.h>
 #include <vector>
 
 #include <ucxx/api.h>
 #include <ucxx/utils/sockaddr.h>
 #include <ucxx/utils/ucx.h>
-#include "../../../include/coucxx/coroutine/tag_operations.hpp"
 
 enum class ProgressMode {
   Polling,
@@ -84,8 +80,8 @@ static void listener_cb(ucp_conn_request_h conn_request, void* arg)
 
 static void printUsage()
 {
-  std::cerr << "Usage: coroutine_tag_example [parameters]" << std::endl;
-  std::cerr << " UCXX coroutine tag example" << std::endl;
+  std::cerr << "Usage: ucxx_test [parameters]" << std::endl;
+  std::cerr << " UCXX installation test example" << std::endl;
   std::cerr << std::endl;
   std::cerr << "Parameters are:" << std::endl;
   std::cerr << "  -m          progress mode to use, valid values are: 'polling', 'blocking',"
@@ -149,66 +145,15 @@ std::function<void()> getProgressFunction(std::shared_ptr<ucxx::Worker> worker,
   }
 }
 
-// Coroutine function to send data
-coucxx::coroutine::task<void> send_data_coroutine(std::shared_ptr<ucxx::Endpoint> endpoint,
-                                                 std::vector<int>& data,
-                                                 ucxx::Tag tag) {
-  std::cout << "Sending data with tag " << tag << std::endl;
-
-  // Send the data using the coroutine awaitable
-  co_await coucxx::coroutine::tag_send(endpoint, data.data(), data.size() * sizeof(int), tag);
-
-  std::cout << "Data sent successfully with tag " << tag << std::endl;
-}
-
-// Coroutine function to receive data
-coucxx::coroutine::task<size_t> receive_data_coroutine(std::shared_ptr<ucxx::Worker> worker,
-                                                      std::vector<int>& buffer,
-                                                      ucxx::Tag tag) {
-  std::cout << "Waiting to receive data with tag " << tag << std::endl;
-
-  // Receive the data using the coroutine awaitable
-  auto recv_awaitable = coucxx::coroutine::tag_recv(worker, buffer.data(), buffer.size() * sizeof(int), tag);
-  size_t received_bytes = co_await recv_awaitable;
-
-  std::cout << "Received " << received_bytes << " bytes with tag " << recv_awaitable.sender_tag() << std::endl;
-
-  co_return received_bytes;
-}
-
-// Function to drive the coroutine execution
-void run_coroutine(coucxx::coroutine::task<void>& task, std::shared_ptr<ucxx::Worker> worker) {
-  auto progress = getProgressFunction(worker, progress_mode);
-
-  // Keep progressing until the task is ready
-  while (!task.is_ready()) {
-    progress();
-  }
-
-  // Get the result (will throw if there was an error)
-  try {
-    task.get_result();
-  } catch (const std::exception& e) {
-    std::cerr << "Coroutine failed: " << e.what() << std::endl;
-  }
-}
-
-// Function to drive the coroutine execution with result
-template<typename T>
-T run_coroutine_with_result(coucxx::coroutine::task<T>& task, std::shared_ptr<ucxx::Worker> worker) {
-  auto progress = getProgressFunction(worker, progress_mode);
-
-  // Keep progressing until the task is ready
-  while (!task.is_ready()) {
-    progress();
-  }
-
-  // Get the result (will throw if there was an error)
-  try {
-    return task.get_result();
-  } catch (const std::exception& e) {
-    std::cerr << "Coroutine failed: " << e.what() << std::endl;
-    throw;
+void waitRequests(ProgressMode progressMode,
+                  std::shared_ptr<ucxx::Worker> worker,
+                  const std::vector<std::shared_ptr<ucxx::Request>>& requests)
+{
+  auto progress = getProgressFunction(worker, progressMode);
+  for (auto& r : requests) {
+    while (!r->isCompleted())
+      progress();
+    r->checkError();
   }
 }
 
@@ -216,68 +161,76 @@ int main(int argc, char** argv)
 {
   if (parseCommand(argc, argv) != UCS_OK) return -1;
 
-  std::cout << "UCXX Coroutine Tag Example" << std::endl;
-  std::cout << "=========================" << std::endl;
+  std::cout << "UCXX Installation Test" << std::endl;
+  std::cout << "======================" << std::endl;
 
   try {
-    // Setup: create UCP context, worker, listener and client endpoint.
     auto context = ucxx::createContext({}, ucxx::Context::defaultFeatureFlags);
     auto worker = context->createWorker();
+    auto listener_ctx = std::make_unique<ListenerContext>(worker);
+    auto listener = worker->createListener(listener_port, listener_cb, listener_ctx.get());
+    listener_ctx->setListener(listener);
+    auto endpoint = worker->createEndpointFromHostname("127.0.0.1", listener_port, true);
+    std::cout << "Successfully created UCXX context and worker." << std::endl;
 
-    // Create some test data
-    std::vector<int> send_data(100);
-    std::iota(send_data.begin(), send_data.end(), 0);  // Fill with 0, 1, 2, ...
+    if (progress_mode == ProgressMode::Blocking)
+        worker->initBlockingProgressMode();
+    else if (progress_mode == ProgressMode::ThreadBlocking)
+        worker->startProgressThread(false);
+    else if (progress_mode == ProgressMode::ThreadPolling)
+        worker->startProgressThread(true);
 
-    std::vector<int> recv_buffer(100, 0);  // Initialize with zeros
+    auto progress = getProgressFunction(worker, progress_mode);
+    while (listener_ctx->isAvailable()) progress();
 
-    // Create a listener context
-    ListenerContext listener_ctx(worker);
+    std::vector<std::shared_ptr<ucxx::Request>> requests;
+    std::vector<int> sendWireupBuffer{1, 2, 3, 4, 5};
+    std::vector<std::vector<int>> sendBuffers{
+        std::vector<int>(5), std::vector<int>(500), std::vector<int>(50000)
+    };
 
-    // Create a listener
-    auto listener = worker->createListener(listener_port, listener_cb, &listener_ctx);
-    listener_ctx.setListener(listener);
+    std::vector<int> recvWireupBuffer(sendWireupBuffer.size(), 0);
+    std::vector<std::vector<int>> recvBuffers;
+    for (const auto& buffer : sendBuffers) recvBuffers.emplace_back(std::vector<int>(buffer.size(), 0));
+    requests.push_back(listener_ctx->getEndpoint()->tagSend(
+        sendWireupBuffer.data(), sendWireupBuffer.size() * sizeof(int), ucxx::Tag{0}));
+    requests.push_back(endpoint->tagRecv(recvWireupBuffer.data(),
+                                        sendWireupBuffer.size() * sizeof(int),
+                                        ucxx::Tag{0},
+                                        ucxx::TagMaskFull));
 
-    std::cout << "Listening on port " << listener_port << std::endl;
+    ::waitRequests(progress_mode, worker, requests);
+    requests.clear();
 
-    // Wait for a client connection
-    std::cout << "Waiting for client connection..." << std::endl;
-    while (!listener_ctx.getEndpoint()) {
-      worker->progress();
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    std::cout << "Client connected!" << std::endl;
-
-    // Create and run the send coroutine
-    auto send_task = send_data_coroutine(listener_ctx.getEndpoint(), send_data, ucxx::Tag{42});
-    run_coroutine(send_task, worker);
-
-    // Create and run the receive coroutine
-    auto recv_task = receive_data_coroutine(worker, recv_buffer, ucxx::Tag{42});
-    size_t received_bytes = run_coroutine_with_result(recv_task, worker);
-
-    // Verify the received data
-    bool data_correct = true;
-    for (size_t i = 0; i < recv_buffer.size(); ++i) {
-      if (recv_buffer[i] != static_cast<int>(i)) {
-        data_correct = false;
-        std::cerr << "Data mismatch at index " << i << ": expected " << i
-                  << ", got " << recv_buffer[i] << std::endl;
-        break;
-      }
-    }
-
-    if (data_correct) {
-      std::cout << "Data verification successful!" << std::endl;
-    } else {
-      std::cout << "Data verification failed!" << std::endl;
-    }
-
-    std::cout << "UCXX coroutine tag example completed successfully!" << std::endl;
+    requests.push_back(listener_ctx->getEndpoint()->tagSend(
+        sendBuffers[0].data(), sendBuffers[0].size() * sizeof(int), ucxx::Tag{0}));
+    requests.push_back(listener_ctx->getEndpoint()->tagRecv(
+        recvBuffers[1].data(), recvBuffers[1].size() * sizeof(int), ucxx::Tag{1}, ucxx::TagMaskFull));
+    requests.push_back(listener_ctx->getEndpoint()->tagSend(
+        sendBuffers[2].data(), sendBuffers[2].size() * sizeof(int), ucxx::Tag{2}, ucxx::TagMaskFull));
+    requests.push_back(endpoint->tagRecv(
+        recvBuffers[2].data(), recvBuffers[2].size() * sizeof(int), ucxx::Tag{2}, ucxx::TagMaskFull));
+    requests.push_back(
+        endpoint->tagSend(sendBuffers[1].data(), sendBuffers[1].size() * sizeof(int), ucxx::Tag{1}));
+    requests.push_back(endpoint->tagRecv(
+        recvBuffers[0].data(), recvBuffers[0].size() * sizeof(int), ucxx::Tag{0}, ucxx::TagMaskFull));
+    
+    ::waitRequests(progress_mode, worker, requests);
+    for (size_t i = 0; i < sendWireupBuffer.size(); ++i)
+        assert(recvWireupBuffer[i] == sendWireupBuffer[i]);
+    for (size_t i = 0; i < sendBuffers.size(); ++i)
+        for (size_t j = 0; j < sendBuffers[i].size(); ++j)
+            assert(recvBuffers[i][j] == sendBuffers[i][j]);
+    
+    if (progress_mode == ProgressMode::ThreadPolling || progress_mode == ProgressMode::ThreadBlocking)
+        worker->stopProgressThread();
+    
+    std::cout << "UCXX installation test passed!" << std::endl;
+    
     return 0;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;
-    std::cerr << "UCXX coroutine tag example failed!" << std::endl;
+    std::cerr << "UCXX installation test failed!" << std::endl;
     return 1;
   }
 }

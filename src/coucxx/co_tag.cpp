@@ -1,10 +1,4 @@
-/**
- * SPDX-FileCopyrightText: Copyright (c) 2023-2025, NVIDIA CORPORATION & AFFILIATES.
- * SPDX-License-Identifier: BSD-3-Clause
- */
-#include "../../../include/coucxx/coroutine/tag_operations.hpp"
-
-#include <iostream>
+#include "coucxx/co_tag.hpp"
 #include <stdexcept>
 
 namespace coucxx {
