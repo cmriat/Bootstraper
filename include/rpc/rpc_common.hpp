@@ -167,12 +167,13 @@ inline TensorSpec read(serializer, Input& in, rpc::type<TensorSpec>) {
     return ret;
 }
 
-// 0 for sleep, 1 for echo, 2 for goodbye, 3 for tensor creation
+// 0 for sleep, 1 for echo, 2 for goodbye, 3 for tensor creation, 4 for tensor transfer
 enum class msg_type : uint32_t {
     SLEEP_MS = 0,
     ECHO = 1,
     GOODBYE = 2,
     CREATE_TENSOR = 3,
+    PREPARE_TENSOR_TRANSFER = 4,
 };
 
 template <typename Enum>

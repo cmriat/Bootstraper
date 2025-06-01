@@ -19,7 +19,8 @@ gnutls = "*"
 liburing = "*"
 libhwloc = "*"
 libsctp-dev = "*"
-folly = ">=2025.5.19.0,<2026"
+folly = "*"
+yaml-cpp = "*"
 
 [target.linux-64.dependencies]
 cmake = "*"
