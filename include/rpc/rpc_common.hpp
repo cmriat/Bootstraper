@@ -150,6 +150,34 @@ inline std::vector<size_t> read(serializer, Input& in, rpc::type<std::vector<siz
     return ret;
 }
 
+// serialization for SimpleTensorSpec
+struct SimpleTensorSpec {
+    std::vector<size_t> shape;
+    size_t element_size;
+
+    size_t total_bytes() const {
+        size_t total = element_size;
+        for (auto dim : shape) {
+            total *= dim;
+        }
+        return total;
+    }
+};
+
+template <typename Output>
+inline void write(serializer, Output& out, const SimpleTensorSpec& v) {
+    write(serializer{}, out, v.shape);
+    write_arithmetic_type(out, v.element_size);
+}
+
+template <typename Input>
+inline SimpleTensorSpec read(serializer, Input& in, rpc::type<SimpleTensorSpec>) {
+    SimpleTensorSpec ret;
+    ret.shape = read(serializer{}, in, rpc::type<std::vector<size_t>>{});
+    ret.element_size = read_arithmetic_type<size_t>(in);
+    return ret;
+}
+    
 // serialization for TensorSpec
 template <typename Output>
 inline void write(serializer, Output& out, const TensorSpec& v) {

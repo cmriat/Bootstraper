@@ -21,6 +21,9 @@ libhwloc = "*"
 libsctp-dev = "*"
 folly = "*"
 yaml-cpp = "*"
+glog = "*"
+zlib = "*"
+liblzma-devel = "*"
 
 [target.linux-64.dependencies]
 cmake = "*"

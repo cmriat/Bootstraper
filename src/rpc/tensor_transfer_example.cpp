@@ -4,118 +4,91 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sleep.hh>
+#include <string>
 #include <ucxx/api.h>
 #include <ucxx/worker.h>
 #include <ucxx/endpoint.h>
 #include <ucxx/buffer.h>
+#include <ucxx/request.h>
+#include <vector>
+
+#include "rpc/tensor_transfer_backend.hpp"
+#include "coucxx/pcq.hpp"
+#include "rpc/rpc_common.hpp"
 
 using namespace seastar;
 namespace bpo = boost::program_options;
 
-// Simple tensor specification
-struct SimpleTensorSpec {
-    std::vector<size_t> shape;
-    size_t element_size;
-
-    size_t total_bytes() const {
-        size_t total = element_size;
-        for (auto dim : shape) {
-            total *= dim;
-        }
-        return total;
-    }
-};
-
 // Server function
-future<> run_server(uint16_t port) {
+future<> run_server(uint16_t port, btsp::TensorTransferManager& mgr,
+                                   std::string& server_addr) {
     std::cout << "Starting tensor transfer server on port " << port << "\n";
+    co_await mgr.initialize_listener(listener_port);
 
-    // Create UCXX context and worker
-    auto context = ucxx::createContext({}, ucxx::Context::defaultFeatureFlags);
-    auto worker = context->createWorker();
+    auto listener_ctx = mgr.get_listener_context();
+    auto worker = mgr.get_worker();
 
-    // Create a listener
-    auto listener = worker->createListener(port,
-        [](ucp_conn_request_h conn_request, void* arg) {
-            auto worker_ptr = static_cast<ucxx::Worker*>(arg);
-            std::cout << "Server received a connection request" << std::endl;
-
-            // Create an endpoint from the connection request
-            auto listener_ptr = static_cast<ucxx::Listener*>(arg);
-            auto endpoint = listener_ptr->createEndpointFromConnRequest(conn_request, true);
-
-            // Receive tensor metadata
-            std::vector<size_t> shape_buffer(3);
-            size_t element_size;
-
-            // Create a request for the receive operation
-            auto shape_request = worker_ptr->tagRecv(shape_buffer.data(), shape_buffer.size() * sizeof(size_t), ucxx::Tag{1}, ucxx::TagMaskFull);
-            auto element_size_request = worker_ptr->tagRecv(&element_size, sizeof(element_size), ucxx::Tag{2}, ucxx::TagMaskFull);
-
-            // Wait for the requests to complete
-            while (!shape_request->isCompleted() || !element_size_request->isCompleted()) {
-                worker_ptr->progress();
-            }
-
-            // Check for errors
-            shape_request->checkError();
-            element_size_request->checkError();
-
-            // Create tensor spec
-            SimpleTensorSpec spec;
-            spec.shape = shape_buffer;
-            spec.element_size = element_size;
-
-            std::cout << "Server received tensor metadata:\n";
-            std::cout << "  Shape: [";
+    auto&& shands_rpc = rpc_context::get_protocol();
+    shands_rpc.register_handler(to_underlying(msg_type::PREPARE_TENSOR_TRANSFER), 
+        [](TensorSpec spec) -> future<btsp::TensorTransferResponse> {
+            std::stringstream shape_str;
+            shape_str << "[";
             for (size_t i = 0; i < spec.shape.size(); ++i) {
-                if (i > 0) std::cout << ", ";
-                std::cout << spec.shape[i];
+                if (i > 0) shape_str << ", ";
+                shape_str << spec.shape[i];
             }
-            std::cout << "]\n";
-            std::cout << "  Element size: " << spec.element_size << " bytes\n";
-            std::cout << "  Total size: " << spec.total_bytes() << " bytes\n";
+            shape_str << "]";
 
-            // Allocate a buffer for the tensor data
-            auto buffer = ucxx::allocateBuffer(ucxx::BufferType::Host, spec.total_bytes());
+            std::cout << "Server: preparing tensor with shape: " << shape_str.str() << "\n"
+                      << "  Buffer type: " << static_cast<int>(spec.buffer_type) << "\n"
+                      << "  Data type: " << static_cast<int>(spec.data_type) << "\n"
+                      << "  Total size: " << spec.total_bytes() << " bytes\n";
+            
+            btsp::TensorTransferResponse response;
+            response.tag = 347;
+            return make_ready_future<btsp::TensorTransferResponse>(response);
+        });
 
-            // Receive the tensor data
-            auto data_request = worker_ptr->tagRecv(buffer->data(), buffer->getSize(), ucxx::Tag{3}, ucxx::TagMaskFull);
+    std::cout << "RPC handlers registered.\n";
 
-            // Wait for the request to complete
-            while (!data_request->isCompleted()) {
-                worker_ptr->progress();
-            }
+    rpc::server_options so;
+    auto& mc = rpc_context::get_compressor();
+    so.compressor_factory = &mc;
 
-            // Check for errors
-            data_request->checkError();
+    rpc::resource_limits limits;
+    limits.bloat_factor = 1;
+    limits.basic_request_size = 1024;
+    limits.max_memory = 10'000'000;
+    std::cout << "Creating RPC server on port " << port << "\n";
+    std::unique_ptr<rpc::protocol<serializer>::server> server =
+    std::make_unique<rpc::protocol<serializer>::server>(shands_rpc, 
+                                                        so, 
+                                                        ipv4_addr{port},
+                                                        limits);
+    
+    while (listener_ctx->isAvailable()) {
+        worker->progress();
+    }
 
-            std::cout << "Server received tensor data successfully\n";
+    std::cout << "Server is now ready, waiting for client connection...\n";
 
-            // Send acknowledgment
-            uint32_t ack = 1;
-            auto ack_request = endpoint->tagSend(&ack, sizeof(ack), ucxx::Tag{4});
+    auto endpoint = listener_ctx->getEndpoint();
 
-            // Wait for the request to complete
-            while (!ack_request->isCompleted()) {
-                worker_ptr->progress();
-            }
+    std::vector<int> recv_buf(5, 0);
+    auto recv_req = endpoint->tagRecv(recv_buf.data(), recv_buf.size() * sizeof(int), ucxx::Tag{0}, ucxx::TagMaskFull);
+    // TODO: isolate polling task
+    // Prevent blocking seastar event loop
+    while(!recv_req->isCompleted()) {
+        worker->progress();
+    }
+    recv_req->checkError();
+    std::cout << "Received data: ";
+    for (const auto& val : recv_buf) {
+        std::cout << val << " ";
+    }
+    std::cout << "\n";
 
-            // Check for errors
-            ack_request->checkError();
-
-            std::cout << "Server sent acknowledgment\n";
-        },
-        worker.get());
-
-    // Start the worker progress thread
-    worker->startProgressThread(true);
-
-    // Create a promise that will be fulfilled when the server should shut down
     auto keep_alive = std::make_shared<promise<>>();
-
-    // In a real implementation, we would handle signals properly
-    // For this example, we'll just wait for user input to shut down
     std::cout << "Press Enter to shut down the server...\n";
     std::thread([keep_alive] {
         std::cin.get();
@@ -123,102 +96,55 @@ future<> run_server(uint16_t port) {
         keep_alive->set_value();
     }).detach();
 
-    return keep_alive->get_future().then([worker, context] {
-        // Stop the worker progress thread
+    co_return co_await keep_alive->get_future().then([worker] {
         worker->stopProgressThread();
-
         return make_ready_future<>();
     });
 }
 
 // Client function
-future<> run_client(const std::string& server_addr, uint16_t port) {
+future<> run_client(const std::string& server_addr, uint16_t port,
+                    btsp::TensorTransferManager& mgr) {
     std::cout << "Starting tensor transfer client, connecting to " << server_addr << ":" << port << "\n";
+    auto worker = mgr.get_worker();
+    auto endpoint = worker->createEndpointFromHostname(server_addr.c_str(), listener_port, true);
 
-    // Create UCXX context and worker
-    auto context = ucxx::createContext({}, ucxx::Context::defaultFeatureFlags);
-    auto worker = context->createWorker();
+    auto&& shands_rpc = rpc_context::get_protocol();
+    auto send_spec = shands_rpc.make_client<future<btsp::TensorTransferResponse>(TensorSpec)>(
+        to_underlying(msg_type::PREPARE_TENSOR_TRANSFER));
 
-    // Create an endpoint to the server
-    auto endpoint = worker->createEndpointFromHostname(server_addr.c_str(), port, true);
+    rpc::client_options co;
+    auto& mc = rpc_context::get_compressor();
+    co.compressor_factory = &mc;
 
-    // Start the worker progress thread
-    worker->startProgressThread(true);
+    std::unique_ptr<rpc::protocol<serializer>::client> client =
+        std::make_unique<rpc::protocol<serializer>::client>(shands_rpc, 
+                                                            co, 
+                                                            ipv4_addr{server_addr});
 
-    // Create a tensor specification
-    SimpleTensorSpec spec;
-    spec.shape = {2, 3, 4};  // 2x3x4 tensor
-    spec.element_size = sizeof(float);
+    (void)send_spec(*client, TensorSpec{ucxx::BufferType::RMM,DataType::FLOAT32, {2, 3, 4}})
+        .then([&](btsp::TensorTransferResponse response) {
+            std::cout << "Server assigned tag: " << response.tag << "\n";
+        });
 
-    // Allocate a buffer for the tensor data
-    auto buffer = ucxx::allocateBuffer(ucxx::BufferType::Host, spec.total_bytes());
+    std::cout << "Connected to server!\n";
 
-    // Fill the buffer with some test data
-    float* data = reinterpret_cast<float*>(buffer->data());
-    size_t num_elements = spec.total_bytes() / sizeof(float);
-    for (size_t i = 0; i < num_elements; ++i) {
-        data[i] = static_cast<float>(i);
-    }
-
-    std::cout << "Client sending tensor:\n";
-    std::cout << "  Shape: [";
-    for (size_t i = 0; i < spec.shape.size(); ++i) {
-        if (i > 0) std::cout << ", ";
-        std::cout << spec.shape[i];
-    }
-    std::cout << "]\n";
-    std::cout << "  Element size: " << spec.element_size << " bytes\n";
-    std::cout << "  Total size: " << spec.total_bytes() << " bytes\n";
-
-    // Send tensor metadata
-    auto shape_request = endpoint->tagSend(spec.shape.data(), spec.shape.size() * sizeof(size_t), ucxx::Tag{1});
-    auto element_size_request = endpoint->tagSend(&spec.element_size, sizeof(spec.element_size), ucxx::Tag{2});
-
-    // Wait for the requests to complete
-    while (!shape_request->isCompleted() || !element_size_request->isCompleted()) {
+    std::vector<int> send_buf = {1, 2, 3, 4, 5};
+    auto send_req = endpoint->tagSend(send_buf.data(), send_buf.size() * sizeof(int), ucxx::Tag{0});
+    while (!send_req->isCompleted()) {
         worker->progress();
     }
-
-    // Check for errors
-    shape_request->checkError();
-    element_size_request->checkError();
-
-    std::cout << "Client sent tensor metadata\n";
-
-    // Send tensor data
-    auto data_request = endpoint->tagSend(buffer->data(), buffer->getSize(), ucxx::Tag{3});
-
-    // Wait for the request to complete
-    while (!data_request->isCompleted()) {
-        worker->progress();
+    send_req->checkError();
+    std::cout << "Sent data: ";
+    for (const auto& val : send_buf) {
+        std::cout << val << " ";
     }
-
-    // Check for errors
-    data_request->checkError();
-
-    std::cout << "Client sent tensor data\n";
-
-    // Receive acknowledgment
-    uint32_t ack = 0;
-    auto ack_request = worker->tagRecv(&ack, sizeof(ack), ucxx::Tag{4}, ucxx::TagMaskFull);
-
-    // Wait for the request to complete
-    while (!ack_request->isCompleted()) {
-        worker->progress();
-    }
-
-    // Check for errors
-    ack_request->checkError();
-
-    std::cout << "Client received acknowledgment: " << ack << "\n";
-
-    // Stop the worker progress thread
-    worker->stopProgressThread();
+    std::cout << "\n";
 
     return make_ready_future<>();
 }
 
-// Main function
+
 int main(int ac, char** av) {
     app_template app;
     app.add_options()
@@ -228,12 +154,18 @@ int main(int ac, char** av) {
     return app.run_deprecated(ac, av, [&app] {
         auto&& config = app.configuration();
         uint16_t port = config["port"].as<uint16_t>();
-
+        std::string server_addr;
+        btsp::initialize_tensor_transfer().then([] {
+            std::cout << "Tensor transfer manager initialized.\n";
+        }).get();
+        auto&& mgr = btsp::get_tensor_transfer_manager();
         if (config.count("server")) {
-            std::string server_addr = config["server"].as<std::string>();
-            return run_client(server_addr, port);
+            server_addr = config["server"].as<std::string>();
+            std::cout << "Running in client mode, connecting to " << server_addr << ":" << port << "\n";
+            return run_client(server_addr, port, mgr);
         } else {
-            return run_server(port);
+            std::cout << "Running in server mode on port " << port << "\n";
+            return run_server(port, mgr, server_addr);
         }
     });
 }

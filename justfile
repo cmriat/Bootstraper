@@ -14,11 +14,11 @@ quick:
 
 run:
     cd {{ build_dir }} && \
-    ./{{ example_bin }}
+    ./{{ example_bin }} --port=33123
 
 run-client:
     cd {{ build_dir }} && \
-    ./{{ example_bin }} --server=127.0.0.1
+    ./{{ example_bin }} --server=127.0.0.1 --port=33123
 
 clean:
     rm -rf {{ build_dir }}

@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build/bin)
 
+set(dpdk_INCLUDE_DIR /root/kernel_dev/Bootstraper/.pixi/envs/default/include/seastar)
+
 add_definitions(
     -DSEASTAR_SCHEDULING_GROUPS_COUNT=16
     -DSEASTAR_API_LEVEL=7
@@ -30,6 +32,8 @@ find_package(ucx REQUIRED)
 find_package(ucxx REQUIRED)
 
 find_package (Seastar REQUIRED)
+find_package (folly REQUIRED)
+find_package (glog REQUIRED)
 
 
 add_subdirectory(src/rpc)

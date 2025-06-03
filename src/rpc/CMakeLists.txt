@@ -1,56 +1,46 @@
-add_library(tensor_transfer
-    tensor_transfer.cpp
-)
+# add_executable(rpc_sleep
+#     rpc_runner.cpp
+#     rpc_server.cpp
+#     rpc_client.cpp
+#     tensor_coroutines.cpp
+# )
 
-add_executable(rpc_sleep
-    rpc_runner.cpp
-    rpc_server.cpp
-    rpc_client.cpp
-    tensor_coroutines.cpp
-)
-
-add_executable(rpc_example
-    eg.cpp
-)
+# add_executable(rpc_example
+#     eg.cpp
+# )
 
 add_executable(tensor_transfer_example
+    tensor_transfer_backend.cpp
     tensor_transfer_example.cpp
 )
 
-target_include_directories(tensor_transfer PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(rpc_sleep PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(rpc_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
+# target_include_directories(rpc_sleep PRIVATE ${CMAKE_SOURCE_DIR}/include)
+# target_include_directories(rpc_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(tensor_transfer_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
-target_link_libraries(tensor_transfer
-    Seastar::seastar
-    ucxx::ucxx
-)
+# target_link_libraries(rpc_sleep
+#     Seastar::seastar
+#     fmt::fmt
+#     Boost::program_options
+#     ucxx::ucxx
+# )
 
-target_link_libraries(rpc_sleep
-    Seastar::seastar
-    fmt::fmt
-    Boost::program_options
-    ucxx::ucxx
-    tensor_transfer
-)
-
-target_link_libraries(rpc_example
-    Seastar::seastar
-    fmt::fmt
-    Boost::program_options
-    ucxx::ucxx
-)
+# target_link_libraries(rpc_example
+#     Seastar::seastar
+#     fmt::fmt
+#     Boost::program_options
+#     ucxx::ucxx
+# )
 
 target_link_libraries(tensor_transfer_example
     Seastar::seastar
     fmt::fmt
     Boost::program_options
     ucxx::ucxx
-    tensor_transfer
+    Folly::folly
+    glog::glog
 )
 
-target_compile_options(tensor_transfer PRIVATE -Wall -Wextra -Wno-unused-parameter)
-target_compile_options(rpc_sleep PRIVATE -Wall -Wextra -Wno-unused-parameter)
-target_compile_options(rpc_example PRIVATE -Wall -Wextra -Wno-unused-parameter)
+# target_compile_options(rpc_sleep PRIVATE -Wall -Wextra -Wno-unused-parameter)
+# target_compile_options(rpc_example PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_compile_options(tensor_transfer_example PRIVATE -Wall -Wextra -Wno-unused-parameter)
