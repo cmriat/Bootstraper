@@ -195,6 +195,27 @@ inline TensorSpec read(serializer, Input& in, rpc::type<TensorSpec>) {
     return ret;
 }
 
+/**
+ * @brief Response from prepare_tensor_transfer RPC call
+ * Contains the tag to use for RDMA transfer
+ */
+struct TensorTransferResponse {
+    uint64_t tag;
+};
+
+// Serialization for TensorTransferResponse
+template <typename Output>
+inline void write(serializer, Output& out, const TensorTransferResponse& v) {
+    write_arithmetic_type(out, v.tag);
+}
+
+template <typename Input>
+inline TensorTransferResponse read(serializer, Input& in, seastar::rpc::type<TensorTransferResponse>) {
+    TensorTransferResponse ret;
+    ret.tag = read_arithmetic_type<uint64_t>(in);
+    return ret;
+}
+
 // 0 for sleep, 1 for echo, 2 for goodbye, 3 for tensor creation, 4 for tensor transfer
 enum class msg_type : uint32_t {
     SLEEP_MS = 0,

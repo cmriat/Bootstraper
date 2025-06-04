@@ -51,7 +51,7 @@ seastar::future<> TensorTransferManager::initialize() {
     _worker = _context->createWorker();
 
     // Start the worker progress thread
-    _worker->startProgressThread(true);
+    _worker->startProgressThread(false);
 
     // Return a ready future since initialization is complete
     return seastar::make_ready_future<>();
@@ -82,57 +82,6 @@ std::shared_ptr<ucxx::Worker> TensorTransferManager::get_worker() {
 }
 
 
-seastar::future<> TensorTransferManager::send_tensor(client_type& client, const TensorSpec& spec, void* data) {
-    return with_gate(_gate, [this, &client, spec, data]() {
-        return get_units(_transfer_sem, 1).then([this, &client, spec, data](auto units) {
-            std::cout << "Preparing to send tensor, size " << spec.total_bytes() << " bytes" << std::endl;
-
-            // First, exchange tensor metadata via RPC
-            return _prepare_tensor_transfer_client(client, spec).then(
-                [this, data, spec, units = std::move(units)](TensorTransferResponse response) {
-                    uint64_t tag = response.tag;
-                    std::cout << "Sending tensor with tag " << tag << ", size " << spec.total_bytes() << " bytes" << std::endl;
-
-                    // Connect to the server if not already connected
-                    if (!_endpoint) {
-                        // In a real implementation, we would get the server address from the client
-                        // For now, we'll assume we're connecting to localhost
-                        _endpoint = _worker->createEndpointFromHostname("127.0.0.1", 12345, true);
-                    }
-
-                    // Create a promise to track completion
-                    auto promise = std::make_shared<seastar::promise<>>();
-
-                    // Send the tensor data using UCXX tag in a separate thread
-                    std::thread([this, data, spec, tag, promise]() {
-                        try {
-                            // Create a request for the send operation
-                            auto request = _endpoint->tagSend(data, spec.total_bytes(), ucxx::Tag{tag});
-
-                            // Wait for the request to complete
-                            while (!request->isCompleted()) {
-                                // The worker progress is handled by the progress thread
-                                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                            }
-
-                            // Check for errors
-                            request->checkError();
-
-                            // Set the promise value to indicate completion
-                            promise->set_value();
-                        } catch (const std::exception& e) {
-                            // Set the promise exception to indicate failure
-                            promise->set_exception(std::current_exception());
-                        }
-                    }).detach();
-
-                    // Return the future from the promise
-                    return promise->get_future();
-                });
-        });
-    });
-}
-
 // seastar::future<> TensorTransferManager::prepare_tensor_receive(TensorSpec spec) {
 //     std::stringstream shape_str;
 //     shape_str << "[";
@@ -159,39 +108,6 @@ seastar::future<> TensorTransferManager::send_tensor(client_type& client, const 
 // }
 
 // TODO: modify
-void TensorTransferManager::start_tensor_receive(uint64_t tag) {
-    TensorSpec spec;
-    {
-        std::lock_guard<std::mutex> lock(_pending_mutex);
-        auto it = _pending_transfers.find(tag);
-        if (it == _pending_transfers.end()) {
-            throw std::runtime_error("No pending transfer for tag");
-        }
-        spec = it->second;
-    }
-    auto buffer = ucxx::allocateBuffer(spec.buffer_type, spec.total_bytes());
-    std::thread([this, buffer, tag, spec]() {
-        try {
-            auto request = _worker->tagRecv(buffer->data(), buffer->getSize(), ucxx::Tag{tag}, ucxx::TagMaskFull);
-            while (!request->isCompleted()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            request->checkError();
-            std::cout << "Received tensor with tag " << tag << ", size " << spec.total_bytes() << " bytes" << std::endl;
-            {
-                std::lock_guard<std::mutex> lock(_pending_mutex);
-                _pending_transfers.erase(tag);
-            }
-            std::cout << "Tensor received successfully" << std::endl;
-        } catch (const std::exception& e) {
-            std::cerr << "Error receiving tensor: " << e.what() << std::endl;
-            {
-                std::lock_guard<std::mutex> lock(_pending_mutex);
-                _pending_transfers.erase(tag);
-            }
-        }
-    }).detach();
-}
 
 seastar::future<> TensorTransferManager::shutdown() {
     // Close the gate to prevent new operations
