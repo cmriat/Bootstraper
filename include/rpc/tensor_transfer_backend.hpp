@@ -1,16 +1,17 @@
 #pragma once
 
 #include <memory>
-#include <seastar/core/future.hh>
-#include <seastar/core/semaphore.hh>
-#include <seastar/core/gate.hh>
-#include <seastar/rpc/rpc.hh>
 #include <ucxx/api.h>
 #include <ucxx/worker.h>
 #include <ucxx/endpoint.h>
 #include <ucxx/buffer.h>
 #include <ucxx/utils/sockaddr.h>
 #include <ucxx/utils/ucx.h>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <atomic>
 
 
 // listening port
@@ -18,6 +19,43 @@ static uint16_t listener_port = 12345;
 void listener_cb(ucp_conn_request_h conn_request, void* arg);
 
 namespace btsp {
+
+// Forward declarations
+class RdmaThreadManager;
+
+// RDMA request types
+enum class RdmaRequestType {
+    TAG_SEND,
+    TAG_RECV,
+    CONNECT,
+    LISTEN,
+    SHUTDOWN
+};
+
+// RDMA request structure
+struct RdmaRequest {
+    RdmaRequestType type;
+    void* data;
+    size_t size;
+    uint64_t tag;
+    std::string remote_addr;
+    uint16_t remote_port;
+    std::shared_ptr<seastar::promise<bool>> promise;
+
+    RdmaRequest(RdmaRequestType t) : type(t), data(nullptr), size(0), tag(0), remote_port(0) {}
+};
+
+// RDMA state machine states
+enum class RdmaState {
+    IDLE,
+    LISTENING,
+    CONNECTING,
+    CONNECTED,
+    SENDING,
+    RECEIVING,
+    ERROR,
+    SHUTDOWN
+};
 
 class ListenerContext {
  private:
@@ -43,124 +81,135 @@ class ListenerContext {
   void releaseEndpoint() { _endpoint.reset(); }
 };
 
-
 /**
- * @brief Tensor Transfer Manager
+ * @brief RDMA Thread Manager
  *
- * This class manages the transfer of tensor data between client and server
- * using Seastar RPC for metadata exchange and UCXX for RDMA transfer.
+ * This class manages UCXX RDMA operations in separate threads to avoid blocking
+ * the Seastar main event loop. It implements a state machine pattern with
+ * request queues for communication between Seastar RPC thread and UCXX threads.
  */
-class TensorTransferManager {
+class RdmaThreadManager {
 public:
-    TensorTransferManager();
+    RdmaThreadManager();
+    ~RdmaThreadManager();
 
-    /**
-     * @brief Destroy the Tensor Transfer Manager
-     */
-    ~TensorTransferManager();
+    // Initialize the RDMA thread manager
+    bool initialize(bool server_mode = false, uint16_t port = 0);
 
-    /**
-     * @brief Initialize the tensor transfer manager
-     *
-     * @return seastar::future<> Future that resolves when initialization is complete
-     */
-    seastar::future<> initialize();
+    // Initialize as Seastar future (for compatibility with TensorTransferManager)
+    seastar::future<> initialize_async(bool server_mode = false, uint16_t port = 0);
 
-    /**
-     * @brief Initialize the tensor transfer serving listener
-     * @param port listen port
-     * @return seastar::future<> Future that resolves when initialization is complete
-     */
+    // Initialize listener (server mode)
     seastar::future<> initialize_listener(uint16_t port);
 
-    /**
-     * @brief Get ListenerContext
-     */
-    std::shared_ptr<ListenerContext> get_listener_context();
+    // Shutdown the RDMA thread manager
+    void shutdown();
 
-    /**
-     * @brief Get Worker
-     */
-    std::shared_ptr<ucxx::Worker> get_worker();
+    // Shutdown as Seastar future (for compatibility)
+    seastar::future<> shutdown_async();
 
-    // /**
-    //  * @brief Register RPC handlers for tensor transfer
-    //  *
-    //  * @param proto The RPC protocol to register handlers with
-    //  */
-    // void register_rpc_handlers(protocol_type& proto);
+    // Submit requests to RDMA thread
+    seastar::future<bool> submit_tag_send(void* data, size_t size, uint64_t tag);
+    seastar::future<bool> submit_tag_recv(void* data, size_t size, uint64_t tag);
+    seastar::future<bool> submit_connect(const std::string& remote_addr, uint16_t remote_port);
+    seastar::future<bool> submit_listen(uint16_t port);
 
-    // /**
-    //  * @brief Create RPC clients for tensor transfer
-    //  *
-    //  * @param proto The RPC protocol to create clients with
-    //  */
-    // decltype(auto) create_rpc_clients(protocol_type& proto);
+    // Get current state
+    RdmaState get_state() const { return _current_state.load(); }
 
-    // /**
-    //  * @brief Send a tensor to the remote endpoint
-    //  *
-    //  * @param client The RPC client to use for metadata exchange
-    //  * @param spec Tensor specification
-    //  * @param data Pointer to the tensor data
-    //  * @return seastar::future<> Future that resolves when send is complete
-    //  */
-    // seastar::future<> send_tensor(client_type& client, const TensorSpec& spec, void* data);
+    // Check if connected
+    bool is_connected() const { return _current_state.load() == RdmaState::CONNECTED; }
 
-    // /**
-    //  * @brief Prepare to receive a tensor (server-side)
-    //  *
-    //  * @param spec Tensor specification from client
-    //  * @return seastar::future<TensorTransferResponse> Future that resolves with the tag to use for RDMA
-    //  */
-    // seastar::future<> prepare_tensor_receive(TensorSpec spec);
-
-
-    // TODO: explain
-    void start_tensor_receive(uint64_t tag);
-
-    /**
-     * @brief Shutdown the tensor transfer manager
-     *
-     * @return seastar::future<> Future that resolves when shutdown is complete
-     */
-    seastar::future<> shutdown();
+    // Legacy compatibility methods
+    std::shared_ptr<ListenerContext> get_listener_context() { return _listener_ctx; }
+    std::shared_ptr<ucxx::Worker> get_worker() { return _worker; }
 
 private:
-    // UCXX context and worker
+    // Thread functions
+    void progress_thread_func();
+    void request_thread_func();
+    void state_machine_thread_func();
+
+    // State machine handlers
+    void handle_idle_state();
+    void handle_listening_state();
+    void handle_connecting_state();
+    void handle_connected_state();
+    void handle_sending_state();
+    void handle_receiving_state();
+    void handle_error_state();
+
+    // Request processing
+    void process_request(const RdmaRequest& request);
+    void submit_request(RdmaRequest request);
+
+    // UCXX resources
     std::shared_ptr<ucxx::Context> _context;
     std::shared_ptr<ucxx::Worker> _worker;
     std::shared_ptr<ucxx::Endpoint> _endpoint;
-
+    std::shared_ptr<ucxx::Listener> _listener;
     std::shared_ptr<ListenerContext> _listener_ctx;
 
-    // Gate to ensure all operations complete before shutdown
-    seastar::gate _gate;
+    // Threading
+    std::thread _progress_thread;
+    std::thread _request_thread;
+    std::thread _state_machine_thread;
 
+    // Request queue
+    std::queue<RdmaRequest> _request_queue;
+    std::mutex _queue_mutex;
+    std::condition_variable _queue_cv;
+
+    // State management
+    std::atomic<RdmaState> _current_state{RdmaState::IDLE};
+    std::atomic<bool> _shutdown_requested{false};
+    std::atomic<bool> _running{false};
+
+    // Configuration
+    bool _server_mode{false};
+    uint16_t _port{0};
+
+    // Active requests tracking
+    std::shared_ptr<ucxx::Request> _active_send_request;
+    std::shared_ptr<ucxx::Request> _active_recv_request;
 };
 
 /**
- * @brief Get the global tensor transfer manager
+ * @brief Get the global RDMA thread manager
  *
- * @return TensorTransferManager& Reference to the global tensor transfer manager
+ * @return RdmaThreadManager& Reference to the global RDMA thread manager
  */
-TensorTransferManager& get_tensor_transfer_manager();
+RdmaThreadManager& get_rdma_thread_manager();
 
 /**
- * @brief Initialize the global tensor transfer manager
+ * @brief Initialize the global RDMA thread manager
  *
  * @param server_mode Whether this is a server (true) or client (false)
+ * @param port Port number for server mode
  * @return seastar::future<> Future that resolves when initialization is complete
  */
-seastar::future<> initialize_tensor_transfer();
+seastar::future<> initialize_rdma_manager(bool server_mode = false, uint16_t port = 0);
 
+/**
+ * @brief Initialize the global RDMA thread manager listener
+ *
+ * @param port Port number to listen on
+ * @return seastar::future<> Future that resolves when initialization is complete
+ */
+seastar::future<> initialize_rdma_listener(uint16_t port);
+
+/**
+ * @brief Get the global listener context
+ *
+ * @return std::shared_ptr<ListenerContext> Shared pointer to the listener context
+ */
 std::shared_ptr<ListenerContext> get_listener_context();
 
 /**
- * @brief Shutdown the global tensor transfer manager
+ * @brief Shutdown the global RDMA thread manager
  *
  * @return seastar::future<> Future that resolves when shutdown is complete
  */
-seastar::future<> shutdown_tensor_transfer();
+seastar::future<> shutdown_rdma_manager();
 
 } // namespace btsp

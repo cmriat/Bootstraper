@@ -20,9 +20,9 @@ using namespace seastar;
 namespace bpo = boost::program_options;
 
 // Server function
-future<> run_server(uint16_t port, btsp::TensorTransferManager& mgr,
+future<> run_server(uint16_t port, btsp::RdmaThreadManager& mgr,
                                    std::string& server_addr) {
-    
+
     co_await mgr.initialize_listener(listener_port);
 
     auto listener_ctx = mgr.get_listener_context();
@@ -57,16 +57,15 @@ future<> run_server(uint16_t port, btsp::TensorTransferManager& mgr,
                                                             limits);
     
     fmt::print("Server is now ready, waiting for client connection...\n");
-    
-    std::thread listener_checking_thread([&worker, &listener_ctx] {
-        while (listener_ctx->isAvailable()) {
-            worker->waitProgress();
-        }
-    });
-    listener_checking_thread.detach();
-    // while (listener_ctx->isAvailable()) {
-    //     worker->progress();
-    // }
+
+    // std::thread listener_checking_thread([&]() {
+    //     while (listener_ctx->isAvailable()) {
+    //         worker->waitProgress();
+    //     }
+    // });
+    while (listener_ctx->isAvailable()) {
+        worker->waitProgress();
+    }
     auto endpoint = listener_ctx->getEndpoint();
     fmt::print("Server got connection from client\n");
 
@@ -76,15 +75,9 @@ future<> run_server(uint16_t port, btsp::TensorTransferManager& mgr,
     auto recv_req = endpoint->tagRecv(recv_buf.data(), recv_buf.size() * sizeof(int), ucxx::Tag{0}, ucxx::TagMaskFull);
     fmt::print("Server: Waiting for data from client\n");
 
-    std::thread req_checking_thread([&worker, &recv_req] {
-        while(!recv_req->isCompleted()) {
-            worker->waitProgress();
-        }
-    });
-    req_checking_thread.detach();
-    // while(!recv_req->isCompleted()) {
-    //     worker->progress();
-    // }
+    while(!recv_req->isCompleted()) {
+        worker->waitProgress();
+    }
     recv_req->checkError();
     fmt::print("Received data: ");
     for (const auto& val : recv_buf) {
@@ -102,7 +95,7 @@ future<> run_server(uint16_t port, btsp::TensorTransferManager& mgr,
 
 // Client function
 future<> run_client(const std::string& server_addr, uint16_t port,
-                    btsp::TensorTransferManager& mgr) {
+                    btsp::RdmaThreadManager& mgr) {
     std::cout << "Starting tensor transfer client, connecting to " << server_addr << ":" << port << "\n";
     auto worker = mgr.get_worker();
     auto endpoint = worker->createEndpointFromHostname(server_addr.c_str(), listener_port, true);
@@ -124,7 +117,8 @@ future<> run_client(const std::string& server_addr, uint16_t port,
 
     co_await send_spec(*client, 128);
     fmt::print("Client: Tensor spec sent successfully\n");
-
+    
+    
     std::vector<int> send_buf = {1, 2, 3, 4, 5};
     auto send_req = endpoint->tagSend(send_buf.data(), send_buf.size() * sizeof(int), ucxx::Tag{0});
     while (!send_req->isCompleted()) {
@@ -156,11 +150,10 @@ int main(int ac, char** av) {
         static logger btsp_logger("tensor transfer rpc");
         rpc_context::get_protocol().set_logger(&btsp_logger);
         std::string server_addr;
-        btsp::initialize_tensor_transfer().then([] {
-            fmt::print("Tensor transfer manager initialized.\n");
+        btsp::initialize_rdma_manager().then([] {
+            fmt::print("RDMA thread manager initialized.\n");
         }).get();
-        auto&& mgr = btsp::get_tensor_transfer_manager();
-        // btsp::TensorTransferManager mgr{};
+        auto&& mgr = btsp::get_rdma_thread_manager();
         if (config.count("server")) {
             server_addr = config["server"].as<std::string>();
             fmt::print("Running in client mode, connecting to {}: {}\n", server_addr, port);

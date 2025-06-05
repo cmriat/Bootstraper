@@ -1,9 +1,5 @@
 #include <iostream>
-#include <sstream>
 #include <string>
-#include <thread>
-#include <seastar/core/future-util.hh>
-#include <seastar/core/sleep.hh>
 
 #include "rpc/tensor_transfer_backend.hpp"
 
@@ -20,7 +16,7 @@ void listener_cb(ucp_conn_request_h conn_request, void* arg) {
             << port_str << std::endl;
 
   if (listener_ctx->isAvailable()) {
-    auto&& mgr = btsp::get_tensor_transfer_manager();
+    auto&& mgr = btsp::get_rdma_thread_manager();
     auto worker = mgr.get_worker();
     listener_ctx->createEndpointFromConnRequest(worker, conn_request);
   } else {
@@ -36,123 +32,47 @@ void listener_cb(ucp_conn_request_h conn_request, void* arg) {
 
 namespace btsp {
 
-// Global tensor transfer manager
-static std::unique_ptr<TensorTransferManager> g_tensor_transfer_manager;
+// Global RDMA thread manager
+static std::unique_ptr<RdmaThreadManager> g_rdma_thread_manager;
 
-TensorTransferManager::TensorTransferManager(){
-}
-
-TensorTransferManager::~TensorTransferManager() {
-}
-
-seastar::future<> TensorTransferManager::initialize() {
-    // Create UCXX context and worker
-    _context = ucxx::createContext({}, ucxx::Context::defaultFeatureFlags);
-    _worker = _context->createWorker();
-
-    // Start the worker progress thread
-    _worker->startProgressThread(false);
-
-    // Return a ready future since initialization is complete
-    return seastar::make_ready_future<>();
-}
-
-seastar::future<> TensorTransferManager::initialize_listener(uint16_t port) {
-    if (!_worker) throw std::runtime_error("Worker must be initialized before listener");
-    if (_listener_ctx) return seastar::make_ready_future<>();
-
-    _listener_ctx = std::make_shared<ListenerContext>();
-
-    auto listener = _worker->createListener(
-        port,
-        listener_cb,
-        _listener_ctx.get()
-    );
-    _listener_ctx->setListener(listener);
-
-    return seastar::make_ready_future<>();
-}
-
-std::shared_ptr<ListenerContext> TensorTransferManager::get_listener_context() {
-    return _listener_ctx;
-}
-
-std::shared_ptr<ucxx::Worker> TensorTransferManager::get_worker() {
-    return _worker;
-}
-
-
-// seastar::future<> TensorTransferManager::prepare_tensor_receive(TensorSpec spec) {
-//     std::stringstream shape_str;
-//     shape_str << "[";
-//     for (size_t i = 0; i < spec.shape.size(); ++i) {
-//         if (i > 0) shape_str << ", ";
-//         shape_str << spec.shape[i];
-//     }
-//     shape_str << "]";
-
-//     std::cout << "Preparing to receive tensor with shape: " << shape_str.str() << "\n"
-//                 << "  Buffer type: " << static_cast<int>(spec.buffer_type) << "\n"
-//                 << "  Data type: " << static_cast<int>(spec.data_type) << "\n"
-//                 << "  Total size: " << spec.total_bytes() << " bytes" << std::endl;
-
-//     try {
-//         auto buffer = ucxx::allocateBuffer(spec.buffer_type, spec.total_bytes());
-//         std::cout << "Allocated buffer for tensor, size: " << buffer->getSize() << " bytes" << std::endl;
-//         return seastar::make_ready_future<>();
-//     } catch (const std::exception& e) {
-//         std::cerr << "Failed to allocate buffer for tensor: " << e.what() << std::endl;
-//         // TODO: Handle error appropriately
-//         throw;
-//     }
-// }
-
-// TODO: modify
-
-seastar::future<> TensorTransferManager::shutdown() {
-    // Close the gate to prevent new operations
-    auto closed = _gate.close();
-
-    // Stop the worker progress thread
-    if (_worker) {
-        _worker->stopProgressThread();
+RdmaThreadManager& get_rdma_thread_manager() {
+    if (!g_rdma_thread_manager) {
+        throw std::runtime_error("RDMA thread manager not initialized");
     }
-
-    // Clean up UCXX resources
-    _endpoint.reset();
-    _worker.reset();
-    _context.reset();
-
-    return closed.then([] {
-        return seastar::make_ready_future<>();
-    });
+    return *g_rdma_thread_manager;
 }
 
-TensorTransferManager& get_tensor_transfer_manager() {
-    if (!g_tensor_transfer_manager) {
-        throw std::runtime_error("Tensor transfer manager not initialized");
-    }
-
-    return *g_tensor_transfer_manager;
-}
-
-seastar::future<> initialize_tensor_transfer() {
-    if (g_tensor_transfer_manager) {
-        std::cout << "Tensor transfer manager already initialized" << std::endl;
+seastar::future<> initialize_rdma_manager(bool server_mode, uint16_t port) {
+    if (g_rdma_thread_manager) {
+        std::cout << "RDMA thread manager already initialized" << std::endl;
         return seastar::make_ready_future<>();
     }
 
-    g_tensor_transfer_manager = std::make_unique<TensorTransferManager>();
-    return g_tensor_transfer_manager->initialize();
+    g_rdma_thread_manager = std::make_unique<RdmaThreadManager>();
+    return g_rdma_thread_manager->initialize_async(server_mode, port);
 }
 
-seastar::future<> shutdown_tensor_transfer() {
-    if (!g_tensor_transfer_manager) {
+seastar::future<> initialize_rdma_listener(uint16_t port) {
+    if (!g_rdma_thread_manager) {
+        return initialize_rdma_manager(true, port);
+    }
+    return g_rdma_thread_manager->initialize_listener(port);
+}
+
+std::shared_ptr<ListenerContext> get_listener_context() {
+    if (!g_rdma_thread_manager) {
+        return nullptr;
+    }
+    return g_rdma_thread_manager->get_listener_context();
+}
+
+seastar::future<> shutdown_rdma_manager() {
+    if (!g_rdma_thread_manager) {
         return seastar::make_ready_future<>();
     }
 
-    return g_tensor_transfer_manager->shutdown().then([] {
-        g_tensor_transfer_manager.reset();
+    return g_rdma_thread_manager->shutdown_async().then([] {
+        g_rdma_thread_manager.reset();
         return seastar::make_ready_future<>();
     });
 }
