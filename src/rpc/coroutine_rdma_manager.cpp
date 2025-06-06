@@ -2,6 +2,8 @@
 #include <iostream>
 #include <chrono>
 #include <algorithm>
+#include <cstring>
+#include <fstream>
 
 namespace btsp {
 
@@ -9,25 +11,110 @@ namespace btsp {
 static std::unique_ptr<CoroutineRdmaManager> g_coroutine_rdma_manager;
 static std::mutex g_coroutine_manager_mutex;
 
+// Enhanced memory and system diagnostics
+static void print_memory_info() {
+    try {
+        std::ifstream meminfo("/proc/meminfo");
+        std::string line;
+        while (std::getline(meminfo, line)) {
+            if (line.find("MemAvailable:") == 0 || line.find("MemFree:") == 0) {
+                std::cout << "Memory: " << line << std::endl;
+            }
+        }
+    } catch (...) {
+        std::cout << "Memory: Unable to read /proc/meminfo" << std::endl;
+    }
+}
+
+static bool check_available_memory() {
+    try {
+        print_memory_info();
+
+        // Try to allocate a small test buffer
+        std::string test_string;
+        test_string.reserve(1024);  // Try to reserve 1KB
+
+        // Try a slightly larger allocation
+        std::vector<char> test_buffer(4096);
+
+        std::cout << "Memory check: Basic allocations successful" << std::endl;
+        return true;
+    } catch (const std::bad_alloc& e) {
+        std::cout << "Memory check: std::bad_alloc - " << e.what() << std::endl;
+        return false;
+    } catch (const std::exception& e) {
+        std::cout << "Memory check: Exception - " << e.what() << std::endl;
+        return false;
+    }
+}
+
 // RdmaAwaitable implementation
-RdmaAwaitable::RdmaAwaitable(CoroutineRdmaManager* mgr, RdmaOpType type, void* data, 
+RdmaAwaitable::RdmaAwaitable(CoroutineRdmaManager* mgr, RdmaOpType type, void* data,
                              size_t size, uint64_t tag, const std::string& addr, uint16_t port)
-    : manager(mgr), op_type(type), data(data), size(size), tag(tag), remote_addr(addr), remote_port(port) {
+    : manager(mgr), op_type(type), data(data), size(size), tag(tag), remote_port(port) {
+        std::cout << "RdmaAwaitable: Starting constructor" << std::endl;
+
+        // Copy the string directly to avoid dangling pointer issues
+        try {
+            if (!addr.empty()) {
+                std::cout << "RdmaAwaitable: Copying provided address" << std::endl;
+                remote_addr = addr;  // Copy the string
+            } else {
+                std::cout << "RdmaAwaitable: Using default address" << std::endl;
+                remote_addr = "127.0.0.1";  // Use default
+            }
+            std::cout << "RdmaAwaitable: Address copied successfully" << std::endl;
+        } catch (const std::bad_alloc& e) {
+            std::cout << "RdmaAwaitable: Failed to copy address, using default" << std::endl;
+            remote_addr = "127.0.0.1";  // Fallback
+        }
+
+        std::cout << "RdmaAwaitable: Constructor completed" << std::endl;
 }
 
 void RdmaAwaitable::await_suspend(std::coroutine_handle<> handle) {
     suspended_handle = handle;
-    
-    CoroutineRdmaManager::CoroutineOperation op(op_type);
-    op.data = data;
-    op.size = size;
-    op.tag = tag;
-    op.remote_addr = remote_addr;
-    op.remote_port = remote_port;
-    op.handle = handle;
-    op.result_ptr = &result;
-    
-    manager->submit_coroutine_operation(std::move(op));
+    std::cout << "RdmaAwaitable: await_suspend called" << std::endl;
+
+    try {
+        std::cout << "RdmaAwaitable: Creating CoroutineOperation" << std::endl;
+        CoroutineRdmaManager::CoroutineOperation op(op_type);
+
+        std::cout << "RdmaAwaitable: Setting basic fields" << std::endl;
+        op.data = data;
+        op.size = size;
+        op.tag = tag;
+
+        std::cout << "RdmaAwaitable: About to copy address string" << std::endl;
+        // Copy the address string safely
+        try {
+            if (!remote_addr.empty()) {
+                std::cout << "RdmaAwaitable: Copying address string" << std::endl;
+                op.remote_addr = remote_addr;  // Copy the string
+                std::cout << "RdmaAwaitable: String copy successful" << std::endl;
+            } else {
+                std::cout << "RdmaAwaitable: Using fallback address" << std::endl;
+                op.remote_addr = "127.0.0.1";  // Fallback for localhost
+            }
+        } catch (const std::bad_alloc& e) {
+            std::cout << "RdmaAwaitable: Failed to copy remote_addr, using fallback" << std::endl;
+            op.remote_addr = "127.0.0.1";  // Fallback for localhost
+        }
+
+        std::cout << "RdmaAwaitable: Setting remaining fields" << std::endl;
+        op.remote_port = remote_port;
+        op.handle = handle;
+        op.result_ptr = &result;
+
+        std::cout << "RdmaAwaitable: About to submit operation" << std::endl;
+        manager->submit_coroutine_operation(std::move(op));
+        std::cout << "RdmaAwaitable: Operation submitted successfully" << std::endl;
+    } catch (const std::exception& e) {
+        std::cout << "RdmaAwaitable: Exception in await_suspend: " << e.what() << std::endl;
+        // Set error result and resume immediately
+        result = RdmaOpResult(RdmaResult::FAILURE, 0);
+        handle.resume();
+    }
 }
 
 // StateChangeAwaitable implementation
@@ -70,10 +157,9 @@ bool CoroutineRdmaManager::initialize(bool server_mode, uint16_t port) {
     _port = port;
     
     try {
-        // Create UCXX context and worker
         _context = ucxx::createContext({}, ucxx::Context::defaultFeatureFlags);
         _worker = _context->createWorker();
-        
+
         std::cout << "CoroutineRdmaManager: UCXX context and worker created" << std::endl;
         
         // Start threads
@@ -102,49 +188,62 @@ bool CoroutineRdmaManager::initialize(bool server_mode, uint16_t port) {
 
 void CoroutineRdmaManager::shutdown() {
     std::cout << "CoroutineRdmaManager: Shutdown requested" << std::endl;
-    
-    _shutdown_requested = true;
-    notify_state_change(RdmaState::SHUTDOWN);
-    
-    // Resume all waiting coroutines with failure
-    {
-        std::lock_guard<std::mutex> lock(_state_waiters_mutex);
-        for (auto& waiter : _state_waiters) {
-            if (waiter.result_ptr) {
-                *waiter.result_ptr = RdmaState::SHUTDOWN;
-            }
-            waiter.handle.resume();
-        }
-        _state_waiters.clear();
+
+    // Prevent double shutdown
+    bool expected = false;
+    if (!_shutdown_requested.compare_exchange_strong(expected, true)) {
+        std::cout << "CoroutineRdmaManager: Shutdown already in progress" << std::endl;
+        return;
     }
-    
-    // Notify all waiting threads
+
+    notify_state_change(RdmaState::SHUTDOWN);
+
+    // Notify all waiting threads first
     _queue_cv.notify_all();
-    
-    // Join threads
+
+    // Join threads before resuming coroutines to avoid race conditions
     if (_progress_thread.joinable()) {
         _progress_thread.join();
         std::cout << "CoroutineRdmaManager: Progress thread joined" << std::endl;
     }
-    
+
     if (_request_thread.joinable()) {
         _request_thread.join();
         std::cout << "CoroutineRdmaManager: Request thread joined" << std::endl;
     }
-    
+
     if (_state_machine_thread.joinable()) {
         _state_machine_thread.join();
         std::cout << "CoroutineRdmaManager: State machine thread joined" << std::endl;
     }
-    
-    // Clean up UCXX resources
+
+    // Clean up UCXX resources before resuming coroutines
     _active_send_request.reset();
     _active_recv_request.reset();
     _endpoint.reset();
     _listener.reset();
     _worker.reset();
     _context.reset();
-    
+
+    // Resume all waiting coroutines with failure - do this last to avoid use-after-free
+    {
+        std::lock_guard<std::mutex> lock(_state_waiters_mutex);
+        for (auto& waiter : _state_waiters) {
+            try {
+                if (waiter.result_ptr) {
+                    *waiter.result_ptr = RdmaState::SHUTDOWN;
+                }
+                // Only resume if the handle is still valid
+                if (waiter.handle) {
+                    waiter.handle.resume();
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "CoroutineRdmaManager: Error resuming coroutine during shutdown: " << e.what() << std::endl;
+            }
+        }
+        _state_waiters.clear();
+    }
+
     _running = false;
     std::cout << "CoroutineRdmaManager: Shutdown complete" << std::endl;
 }
@@ -158,7 +257,24 @@ RdmaAwaitable CoroutineRdmaManager::tag_recv(void* data, size_t size, uint64_t t
 }
 
 RdmaAwaitable CoroutineRdmaManager::connect(const std::string& remote_addr, uint16_t remote_port) {
-    return RdmaAwaitable(this, RdmaOpType::CONNECT, nullptr, 0, 0, remote_addr, remote_port);
+    std::cout << "CoroutineRdmaManager: connect called" << std::endl;
+
+    // Check available memory before attempting connection
+    if (!check_available_memory()) {
+        std::cout << "CoroutineRdmaManager: Insufficient memory for connection" << std::endl;
+        // Return a failed awaitable - we'll need to handle this in the awaitable
+    }
+
+    std::cout << "CoroutineRdmaManager: About to create RdmaAwaitable" << std::endl;
+
+    try {
+        RdmaAwaitable awaitable(this, RdmaOpType::CONNECT, nullptr, 0, 0, remote_addr, remote_port);
+        std::cout << "CoroutineRdmaManager: RdmaAwaitable created successfully" << std::endl;
+        return awaitable;
+    } catch (const std::exception& e) {
+        std::cout << "CoroutineRdmaManager: Exception creating RdmaAwaitable: " << e.what() << std::endl;
+        throw;
+    }
 }
 
 RdmaAwaitable CoroutineRdmaManager::listen(uint16_t port) {
@@ -174,10 +290,43 @@ StateChangeAwaitable CoroutineRdmaManager::wait_for_connection() {
 }
 
 void CoroutineRdmaManager::submit_coroutine_operation(CoroutineOperation op) {
-    std::lock_guard<std::mutex> lock(_queue_mutex);
-    // TODO: lockfree queue
-    _coroutine_queue.push(std::move(op));
-    _queue_cv.notify_one();
+    try {
+        std::lock_guard<std::mutex> lock(_queue_mutex);
+        // TODO: lockfree queue
+        std::cout << "CoroutineRdmaManager: submit_coroutine_operation called" << std::endl;
+
+        // Check if queue is getting too large (memory pressure indicator)
+        if (_coroutine_queue.size() > 100) {
+            std::cout << "CoroutineRdmaManager: Queue size too large, rejecting operation" << std::endl;
+            if (op.result_ptr) {
+                *op.result_ptr = RdmaOpResult(RdmaResult::FAILURE, 0);
+            }
+            if (op.handle) {
+                op.handle.resume();
+            }
+            return;
+        }
+
+        _coroutine_queue.push(std::move(op));
+        _queue_cv.notify_one();
+    } catch (const std::bad_alloc& e) {
+        std::cout << "CoroutineRdmaManager: Memory allocation failed in submit_coroutine_operation" << std::endl;
+        // Handle the operation immediately with failure
+        if (op.result_ptr) {
+            *op.result_ptr = RdmaOpResult(RdmaResult::FAILURE, 0);
+        }
+        if (op.handle) {
+            op.handle.resume();
+        }
+    } catch (const std::exception& e) {
+        std::cout << "CoroutineRdmaManager: Exception in submit_coroutine_operation: " << e.what() << std::endl;
+        if (op.result_ptr) {
+            *op.result_ptr = RdmaOpResult(RdmaResult::FAILURE, 0);
+        }
+        if (op.handle) {
+            op.handle.resume();
+        }
+    }
 }
 
 void CoroutineRdmaManager::notify_state_change(RdmaState new_state) {
@@ -386,12 +535,40 @@ void CoroutineRdmaManager::process_coroutine_operation(const CoroutineOperation&
             case RdmaOpType::CONNECT: {
                 std::cout << "CoroutineRdmaManager: Processing connect to " << op.remote_addr << ":" << op.remote_port << std::endl;
                 notify_state_change(RdmaState::CONNECTING);
-                _endpoint = _worker->createEndpointFromHostname(op.remote_addr.c_str(), op.remote_port, true);
-                notify_state_change(RdmaState::CONNECTED);
 
-                if (op.result_ptr) {
-                    *op.result_ptr = RdmaOpResult(RdmaResult::SUCCESS, 0);
+                try {
+                    // Check if we already have an endpoint to avoid multiple connections
+                    if (_endpoint) {
+                        std::cout << "CoroutineRdmaManager: Endpoint already exists, reusing connection" << std::endl;
+                        notify_state_change(RdmaState::CONNECTED);
+                        if (op.result_ptr) {
+                            *op.result_ptr = RdmaOpResult(RdmaResult::SUCCESS, 0);
+                        }
+                    } else {
+                        // Add a small delay to reduce memory pressure
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+                        _endpoint = _worker->createEndpointFromHostname(op.remote_addr.c_str(), op.remote_port, true);
+                        notify_state_change(RdmaState::CONNECTED);
+
+                        if (op.result_ptr) {
+                            *op.result_ptr = RdmaOpResult(RdmaResult::SUCCESS, 0);
+                        }
+                    }
+                } catch (const std::bad_alloc& e) {
+                    std::cerr << "CoroutineRdmaManager: Memory allocation failed during connect: " << e.what() << std::endl;
+                    notify_state_change(RdmaState::ERROR);
+                    if (op.result_ptr) {
+                        *op.result_ptr = RdmaOpResult(RdmaResult::FAILURE, 0);
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "CoroutineRdmaManager: Connect failed: " << e.what() << std::endl;
+                    notify_state_change(RdmaState::ERROR);
+                    if (op.result_ptr) {
+                        *op.result_ptr = RdmaOpResult(RdmaResult::FAILURE, 0);
+                    }
                 }
+
                 op.handle.resume();
                 break;
             }

@@ -24,6 +24,7 @@ yaml-cpp = "*"
 glog = "*"
 zlib = "*"
 liblzma-devel = "*"
+gdb = "*"
 
 [target.linux-64.dependencies]
 cmake = "*"

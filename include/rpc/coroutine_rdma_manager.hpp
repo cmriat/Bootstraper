@@ -230,7 +230,7 @@ private:
     void* data;
     size_t size;
     uint64_t tag;
-    std::string remote_addr;
+    std::string remote_addr;  // Store the string directly to avoid dangling pointer
     uint16_t remote_port;
     mutable RdmaOpResult result;
     std::coroutine_handle<> suspended_handle;
