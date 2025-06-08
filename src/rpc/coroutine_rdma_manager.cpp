@@ -3,7 +3,6 @@
 #include <chrono>
 #include <algorithm>
 #include <cstring>
-#include <fstream>
 
 namespace btsp {
 
@@ -11,42 +10,6 @@ namespace btsp {
 static std::unique_ptr<CoroutineRdmaManager> g_coroutine_rdma_manager;
 static std::mutex g_coroutine_manager_mutex;
 
-// Enhanced memory and system diagnostics
-static void print_memory_info() {
-    try {
-        std::ifstream meminfo("/proc/meminfo");
-        std::string line;
-        while (std::getline(meminfo, line)) {
-            if (line.find("MemAvailable:") == 0 || line.find("MemFree:") == 0) {
-                std::cout << "Memory: " << line << std::endl;
-            }
-        }
-    } catch (...) {
-        std::cout << "Memory: Unable to read /proc/meminfo" << std::endl;
-    }
-}
-
-static bool check_available_memory() {
-    try {
-        print_memory_info();
-
-        // Try to allocate a small test buffer
-        std::string test_string;
-        test_string.reserve(1024);  // Try to reserve 1KB
-
-        // Try a slightly larger allocation
-        std::vector<char> test_buffer(4096);
-
-        std::cout << "Memory check: Basic allocations successful" << std::endl;
-        return true;
-    } catch (const std::bad_alloc& e) {
-        std::cout << "Memory check: std::bad_alloc - " << e.what() << std::endl;
-        return false;
-    } catch (const std::exception& e) {
-        std::cout << "Memory check: Exception - " << e.what() << std::endl;
-        return false;
-    }
-}
 
 // RdmaAwaitable implementation
 RdmaAwaitable::RdmaAwaitable(CoroutineRdmaManager* mgr, RdmaOpType type, void* data,
@@ -258,12 +221,6 @@ RdmaAwaitable CoroutineRdmaManager::tag_recv(void* data, size_t size, uint64_t t
 
 RdmaAwaitable CoroutineRdmaManager::connect(const std::string& remote_addr, uint16_t remote_port) {
     std::cout << "CoroutineRdmaManager: connect called" << std::endl;
-
-    // Check available memory before attempting connection
-    if (!check_available_memory()) {
-        std::cout << "CoroutineRdmaManager: Insufficient memory for connection" << std::endl;
-        // Return a failed awaitable - we'll need to handle this in the awaitable
-    }
 
     std::cout << "CoroutineRdmaManager: About to create RdmaAwaitable" << std::endl;
 
