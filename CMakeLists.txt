@@ -38,3 +38,4 @@ find_package (glog REQUIRED)
 
 add_subdirectory(src/rpc)
 add_subdirectory(src/coucxx)
+add_subdirectory(test/example)

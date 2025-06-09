@@ -222,8 +222,6 @@ RdmaAwaitable CoroutineRdmaManager::tag_recv(void* data, size_t size, uint64_t t
 RdmaAwaitable CoroutineRdmaManager::connect(const std::string& remote_addr, uint16_t remote_port) {
     std::cout << "CoroutineRdmaManager: connect called" << std::endl;
 
-    std::cout << "CoroutineRdmaManager: About to create RdmaAwaitable" << std::endl;
-
     try {
         RdmaAwaitable awaitable(this, RdmaOpType::CONNECT, nullptr, 0, 0, remote_addr, remote_port);
         std::cout << "CoroutineRdmaManager: RdmaAwaitable created successfully" << std::endl;
