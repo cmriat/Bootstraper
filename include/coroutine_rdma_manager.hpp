@@ -19,7 +19,7 @@
 namespace btsp {
 
 // RDMA operation result
-enum class RdmaResult {
+enum class FCResult {
     SUCCESS,
     FAILURE,
     TIMEOUT,
@@ -27,7 +27,7 @@ enum class RdmaResult {
 };
 
 // RDMA operation types
-enum class RdmaOpType {
+enum class FCOpType {
     TAG_SEND,
     TAG_RECV,
     CONNECT,
@@ -36,7 +36,7 @@ enum class RdmaOpType {
 };
 
 // RDMA state machine states
-enum class RdmaState {
+enum class FCState {
     IDLE,
     LISTENING,
     CONNECTING,
@@ -48,34 +48,34 @@ enum class RdmaState {
 };
 
 // Forward declaration
-class CoroutineRdmaManager;
+class FastChannelManager;
 
 // RDMA operation result with bytes transferred
-struct RdmaOpResult {
-    RdmaResult result;
+struct FCOpResult {
+    FCResult result;
     size_t bytes_transferred;
     
-    RdmaOpResult(RdmaResult r = RdmaResult::FAILURE, size_t bytes = 0) 
+    FCOpResult(FCResult r = FCResult::FAILURE, size_t bytes = 0) 
         : result(r), bytes_transferred(bytes) {}
     
-    bool success() const { return result == RdmaResult::SUCCESS; }
+    bool success() const { return result == FCResult::SUCCESS; }
     operator bool() const { return success(); }
 };
 
 // Forward declaration
 template<typename T>
-class RdmaTask;
+class FCTask;
 
 // Specialization for non-void types
 template<typename T>
-class RdmaTask {
+class FCTask {
 public:
     struct promise_type {
         std::optional<T> value;
         std::exception_ptr exception;
 
-        RdmaTask get_return_object() {
-            return RdmaTask{std::coroutine_handle<promise_type>::from_promise(*this)};
+        FCTask get_return_object() {
+            return FCTask{std::coroutine_handle<promise_type>::from_promise(*this)};
         }
 
         std::suspend_never initial_suspend() { return {}; }
@@ -92,23 +92,23 @@ public:
     
     using handle_type = std::coroutine_handle<promise_type>;
     
-    RdmaTask(handle_type h) : handle(h) {}
+    FCTask(handle_type h) : handle(h) {}
     
-    ~RdmaTask() {
+    ~FCTask() {
         if (handle) {
             handle.destroy();
         }
     }
     
     // Move-only type
-    RdmaTask(const RdmaTask&) = delete;
-    RdmaTask& operator=(const RdmaTask&) = delete;
+    FCTask(const FCTask&) = delete;
+    FCTask& operator=(const FCTask&) = delete;
     
-    RdmaTask(RdmaTask&& other) noexcept : handle(other.handle) {
+    FCTask(FCTask&& other) noexcept : handle(other.handle) {
         other.handle = {};
     }
     
-    RdmaTask& operator=(RdmaTask&& other) noexcept {
+    FCTask& operator=(FCTask&& other) noexcept {
         if (this != &other) {
             if (handle) {
                 handle.destroy();
@@ -144,13 +144,13 @@ private:
 
 // Specialization for void type
 template<>
-class RdmaTask<void> {
+class FCTask<void> {
 public:
     struct promise_type {
         std::exception_ptr exception;
 
-        RdmaTask get_return_object() {
-            return RdmaTask{std::coroutine_handle<promise_type>::from_promise(*this)};
+        FCTask get_return_object() {
+            return FCTask{std::coroutine_handle<promise_type>::from_promise(*this)};
         }
 
         std::suspend_never initial_suspend() { return {}; }
@@ -165,23 +165,23 @@ public:
 
     using handle_type = std::coroutine_handle<promise_type>;
 
-    RdmaTask(handle_type h) : handle(h) {}
+    FCTask(handle_type h) : handle(h) {}
 
-    ~RdmaTask() {
+    ~FCTask() {
         if (handle) {
             handle.destroy();
         }
     }
 
     // Move-only type
-    RdmaTask(const RdmaTask&) = delete;
-    RdmaTask& operator=(const RdmaTask&) = delete;
+    FCTask(const FCTask&) = delete;
+    FCTask& operator=(const FCTask&) = delete;
 
-    RdmaTask(RdmaTask&& other) noexcept : handle(other.handle) {
+    FCTask(FCTask&& other) noexcept : handle(other.handle) {
         other.handle = {};
     }
 
-    RdmaTask& operator=(RdmaTask&& other) noexcept {
+    FCTask& operator=(FCTask&& other) noexcept {
         if (this != &other) {
             if (handle) {
                 handle.destroy();
@@ -211,49 +211,49 @@ private:
 };
 
 // Awaitable for RDMA operations
-class RdmaAwaitable {
+class FCAwaitable {
 public:
-    RdmaAwaitable(CoroutineRdmaManager* manager, RdmaOpType type, void* data = nullptr, 
+    FCAwaitable(FastChannelManager* manager, FCOpType type, void* data = nullptr, 
                   size_t size = 0, uint64_t tag = 0, const std::string& addr = "", uint16_t port = 0);
     
     bool await_ready() const noexcept { return false; }
     
     void await_suspend(std::coroutine_handle<> handle);
     
-    RdmaOpResult await_resume() const noexcept {
+    FCOpResult await_resume() const noexcept {
         return result;
     }
     
 private:
-    CoroutineRdmaManager* manager;
-    RdmaOpType op_type;
+    FastChannelManager* manager;
+    FCOpType op_type;
     void* data;
     size_t size;
     uint64_t tag;
     std::string remote_addr;  // Store the string directly to avoid dangling pointer
     uint16_t remote_port;
-    mutable RdmaOpResult result;
+    mutable FCOpResult result;
     std::coroutine_handle<> suspended_handle;
     
-    friend class CoroutineRdmaManager;
+    friend class FastChannelManager;
 };
 
 // State change awaitable
 class StateChangeAwaitable {
 public:
-    StateChangeAwaitable(CoroutineRdmaManager* manager, RdmaState target_state);
+    StateChangeAwaitable(FastChannelManager* manager, FCState target_state);
     
     bool await_ready() const noexcept;
     void await_suspend(std::coroutine_handle<> handle);
-    RdmaState await_resume() const noexcept { return current_state; }
+    FCState await_resume() const noexcept { return current_state; }
     
 private:
-    CoroutineRdmaManager* manager;
-    RdmaState target_state;
-    mutable RdmaState current_state;
+    FastChannelManager* manager;
+    FCState target_state;
+    mutable FCState current_state;
     std::coroutine_handle<> suspended_handle;
     
-    friend class CoroutineRdmaManager;
+    friend class FastChannelManager;
 };
 
 /**
@@ -262,10 +262,10 @@ private:
  * This class provides a coroutine-based interface for UCXX RDMA operations,
  * making async code look like synchronous code while maintaining performance.
  */
-class CoroutineRdmaManager {
+class FastChannelManager {
 public:
-    CoroutineRdmaManager();
-    ~CoroutineRdmaManager();
+    FastChannelManager();
+    ~FastChannelManager();
 
     // Initialize the RDMA manager
     bool initialize(bool server_mode = false, uint16_t port = 0);
@@ -274,18 +274,18 @@ public:
     void shutdown();
 
     // Coroutine-based RDMA operations
-    RdmaAwaitable tag_send(void* data, size_t size, uint64_t tag);
-    RdmaAwaitable tag_recv(void* data, size_t size, uint64_t tag);
-    RdmaAwaitable connect(const std::string& remote_addr, uint16_t remote_port);
-    RdmaAwaitable listen(uint16_t port);
+    FCAwaitable tag_send(void* data, size_t size, uint64_t tag);
+    FCAwaitable tag_recv(void* data, size_t size, uint64_t tag);
+    FCAwaitable connect(const std::string& remote_addr, uint16_t remote_port);
+    FCAwaitable listen(uint16_t port);
     
     // Wait for state change
-    StateChangeAwaitable wait_for_state(RdmaState target_state);
+    StateChangeAwaitable wait_for_state(FCState target_state);
     StateChangeAwaitable wait_for_connection();
 
     // State and status queries
-    RdmaState get_state() const { return _current_state.load(); }
-    bool is_connected() const { return _current_state.load() == RdmaState::CONNECTED; }
+    FCState get_state() const { return _current_state.load(); }
+    bool is_connected() const { return _current_state.load() == FCState::CONNECTED; }
     bool is_running() const { return _running.load(); }
 
     // Get UCXX resources (for advanced usage)
@@ -293,28 +293,28 @@ public:
     std::shared_ptr<ucxx::Endpoint> get_endpoint() { return _endpoint; }
 
 private:
-    friend class RdmaAwaitable;
+    friend class FCAwaitable;
     friend class StateChangeAwaitable;
     
     // Internal operation structure for coroutines
     struct CoroutineOperation {
-        RdmaOpType type;
+        FCOpType type;
         void* data;
         size_t size;
         uint64_t tag;
         std::string remote_addr;
         uint16_t remote_port;
         std::coroutine_handle<> handle;
-        RdmaOpResult* result_ptr;
+        FCOpResult* result_ptr;
         
-        CoroutineOperation(RdmaOpType t) : type(t), data(nullptr), size(0), tag(0), remote_port(0), result_ptr(nullptr) {}
+        CoroutineOperation(FCOpType t) : type(t), data(nullptr), size(0), tag(0), remote_port(0), result_ptr(nullptr) {}
     };
     
     // State change waiter
     struct StateWaiter {
-        RdmaState target_state;
+        FCState target_state;
         std::coroutine_handle<> handle;
-        RdmaState* result_ptr;
+        FCState* result_ptr;
     };
     
     // Thread functions
@@ -336,8 +336,8 @@ private:
     void submit_coroutine_operation(CoroutineOperation op);
     
     // State change notification
-    void notify_state_change(RdmaState new_state);
-    void resume_state_waiters(RdmaState new_state);
+    void notify_state_change(FCState new_state);
+    void resume_state_waiters(FCState new_state);
     
     // Listener callback (static)
     static void listener_callback(ucp_conn_request_h conn_request, void* arg);
@@ -363,7 +363,7 @@ private:
     std::mutex _state_waiters_mutex;
     
     // State management
-    std::atomic<RdmaState> _current_state{RdmaState::IDLE};
+    std::atomic<FCState> _current_state{FCState::IDLE};
     std::atomic<bool> _shutdown_requested{false};
     std::atomic<bool> _running{false};
     
@@ -379,7 +379,7 @@ private:
 };
 
 // Global instance management (optional)
-CoroutineRdmaManager& get_global_coroutine_rdma_manager();
+FastChannelManager& get_global_coroutine_rdma_manager();
 bool initialize_global_coroutine_rdma_manager(bool server_mode = false, uint16_t port = 0);
 void shutdown_global_coroutine_rdma_manager();
 

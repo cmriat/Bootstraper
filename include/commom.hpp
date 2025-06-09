@@ -1,12 +1,12 @@
 #pragma once
-#include "rpc/coroutine_rdma_manager.hpp"
+#include "coroutine_rdma_manager.hpp"
 using namespace btsp;
 
 
 class State {
 public:
     std::atomic<bool> should_shutdown{false};
-    std::shared_ptr<CoroutineRdmaManager> rdma_manager;
+    std::shared_ptr<FastChannelManager> rdma_manager;
 
     void request_shutdown() {
         should_shutdown.store(true);
@@ -16,11 +16,11 @@ public:
         return should_shutdown.load();
     }
 
-    void set_rdma_manager(std::shared_ptr<CoroutineRdmaManager> manager) {
+    void set_rdma_manager(std::shared_ptr<FastChannelManager> manager) {
         rdma_manager = manager;
     }
 
-    std::shared_ptr<CoroutineRdmaManager> get_rdma_manager() {
+    std::shared_ptr<FastChannelManager> get_rdma_manager() {
         return rdma_manager;
     }
 };

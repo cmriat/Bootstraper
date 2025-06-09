@@ -21,10 +21,8 @@ CompileFlags:
     - "-Wno-maybe-uninitialized"
     - "-Wno-error=unused-result"
     - "-std=c++23"
+    # TODO: change root dir
     - "-I/root/kernel_dev/Bootstraper/include"
-    - "-I/root/kernel_dev/Bootstraper/include/rpc"
-    - "-I/root/kernel_dev/Bootstraper/include/coucxx"
-    - "-I/root/kernel_dev/Bootstraper/include/tensor"
     - "-I/root/kernel_dev/Bootstraper/.pixi/envs/default/include/"
     - "-I/root/kernel_dev/Bootstraper/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++"
     - "-I/root/kernel_dev/Bootstraper/.pixi/envs/default/lib/gcc/x86_64-conda-linux-gnu/13.3.0/include/c++/x86_64-conda-linux-gnu"

@@ -1,6 +1,8 @@
 /build
-/test
+/test/*
+!/test/example
 /.history
+/chore
 # pixi environments
 .pixi
 *.egg-info

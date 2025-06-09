@@ -2,8 +2,7 @@
 authors = ["kozo <kozoYang@outlook.com>"]
 channels = ["rapidsai",
             "https://prefix.dev/meta-forge",
-            "conda-forge"
-]
+            "conda-forge"]
 name = "bootstraper"
 platforms = ["linux-64"]
 version = "0.1.0"

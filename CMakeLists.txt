@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
-project(rpc_demo)
+project(bootstrapper)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build/bin)
 
+# TODO: change root dir
 set(dpdk_INCLUDE_DIR /root/kernel_dev/Bootstraper/.pixi/envs/default/include/seastar)
 
 add_definitions(
@@ -36,6 +37,5 @@ find_package (folly REQUIRED)
 find_package (glog REQUIRED)
 
 
-add_subdirectory(src/rpc)
-add_subdirectory(src/coucxx)
+add_subdirectory(src)
 add_subdirectory(test/example)
