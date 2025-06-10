@@ -1,6 +1,7 @@
 /build
 /test/*
 !/test/example
+!/test/benchmark
 /.history
 /chore
 # pixi environments
