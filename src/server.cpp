@@ -10,7 +10,7 @@
 
 #include "commom.hpp"
 #include "log_utils.hpp"
-#include "coroutine_rdma_manager.hpp"
+#include "fast_channel_manager.hpp"
 #include "simple_rpc.hpp"
 
 
@@ -166,10 +166,11 @@ int main(int ac, char** av) {
         ("server", bpo::value<sstring>(), "Server address")
         ("v", bpo::value<int>()->default_value(0), "Verbose logging level")
         ("log-dir", bpo::value<std::string>(), "Log directory");
+    
     static logger slp_logger("sleep rpc");
     rpc_context::get_protocol().set_logger(&slp_logger);
     static uint16_t rdma_port = 12346;
-    app.run_deprecated(ac, av, [&app] {
+    app.run(ac, av, [&app] {
         auto&& config = app.configuration();
         uint16_t port = config["port"].as<uint16_t>();
 

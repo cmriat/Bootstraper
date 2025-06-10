@@ -1,5 +1,5 @@
 add_executable(server
-    coroutine_rdma_manager.cpp
+    fast_channel_manager.cpp
     server.cpp
 )
 
@@ -15,3 +15,21 @@ target_link_libraries(server
 )
 
 target_compile_options(server PRIVATE -Wall -Wextra -Wno-unused-parameter -g -O0 -std=c++20)
+
+add_executable(tensor_transfer_demo
+    fast_channel_manager.cpp
+    tensor_transfer_demo.cpp
+)
+
+target_include_directories(tensor_transfer_demo PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+target_link_libraries(tensor_transfer_demo
+    Seastar::seastar
+    ucxx::ucxx
+    fmt::fmt
+    Boost::program_options
+    Folly::folly
+    glog::glog
+)
+
+target_compile_options(tensor_transfer_demo PRIVATE -Wall -Wextra -Wno-unused-parameter -g -O0 -std=c++20)

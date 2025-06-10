@@ -24,6 +24,7 @@ glog = "*"
 zlib = "*"
 liblzma-devel = "*"
 gdb = "*"
+benchmark = "*"
 
 [target.linux-64.dependencies]
 cmake = "*"

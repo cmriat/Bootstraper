@@ -1,5 +1,5 @@
 #pragma once
-#include "coroutine_rdma_manager.hpp"
+#include "fast_channel_manager.hpp"
 using namespace btsp;
 
 
@@ -7,7 +7,7 @@ class State {
 public:
     std::atomic<bool> should_shutdown{false};
     std::shared_ptr<FastChannelManager> rdma_manager;
-
+    
     void request_shutdown() {
         should_shutdown.store(true);
     }

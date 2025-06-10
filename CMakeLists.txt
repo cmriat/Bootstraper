@@ -39,3 +39,4 @@ find_package (glog REQUIRED)
 
 add_subdirectory(src)
 add_subdirectory(test/example)
+add_subdirectory(test/benchmark)

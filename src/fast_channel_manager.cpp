@@ -1,4 +1,4 @@
-#include "coroutine_rdma_manager.hpp"
+#include "fast_channel_manager.hpp"
 #include <iostream>
 #include <chrono>
 #include <algorithm>
@@ -74,7 +74,8 @@ void StateChangeAwaitable::await_suspend(std::coroutine_handle<> handle) {
 }
 
 // FastChannelManager implementation
-FastChannelManager::FastChannelManager() {
+FastChannelManager::FastChannelManager()
+    : _coroutine_queue(1024), _active_send_op_storage(FCOpType::TAG_SEND), _active_recv_op_storage(FCOpType::TAG_RECV) {
     std::cout << "FastChannelManager: Constructor called" << std::endl;
 }
 
@@ -128,9 +129,6 @@ void FastChannelManager::shutdown() {
     }
 
     notify_state_change(FCState::SHUTDOWN);
-
-    // Notify all waiting threads first
-    _queue_cv.notify_all();
 
     // Join threads before resuming coroutines to avoid race conditions
     if (_progress_thread.joinable()) {
@@ -211,24 +209,19 @@ StateChangeAwaitable FastChannelManager::wait_for_connection() {
 
 void FastChannelManager::submit_coroutine_operation(CoroutineOperation op) {
     try {
-        std::lock_guard<std::mutex> lock(_queue_mutex);
-        // TODO: lockfree queue
-
-        // Check if queue is getting too large (memory pressure indicator)
-        if (_coroutine_queue.size() > 100) {
-            std::cout << "FastChannelManager: Queue size too large, rejecting operation" << std::endl;
+        // BlockingQueue handles synchronization and blocking internally
+        // If queue is full, this will block until space is available
+        if (!_coroutine_queue.write(std::move(op))) {
+            std::cout << "FastChannelManager: Failed to write to queue" << std::endl;
             if (op.result_ptr) {
                 *op.result_ptr = FCOpResult(FCResult::FAILURE, 0);
             }
             if (op.handle) {
                 op.handle.resume();
             }
-            return;
         }
-
-        _coroutine_queue.push(std::move(op));
-        _queue_cv.notify_one();
     } catch (const std::exception& e) {
+        std::cout << "FastChannelManager: Exception in submit_coroutine_operation: " << e.what() << std::endl;
         if (op.result_ptr) {
             *op.result_ptr = FCOpResult(FCResult::FAILURE, 0);
         }
@@ -332,25 +325,20 @@ void FastChannelManager::progress_thread_func() {
 
 void FastChannelManager::request_thread_func() {
     while (!_shutdown_requested.load()) {
-        std::unique_lock<std::mutex> lock(_queue_mutex);
-
-        // Wait for operations or shutdown
-        _queue_cv.wait(lock, [this] {
-            return !_coroutine_queue.empty() || _shutdown_requested.load();
-        });
-
-        // Process all available operations
-        while (!_coroutine_queue.empty() && !_shutdown_requested.load()) {
-            CoroutineOperation op = std::move(_coroutine_queue.front());
-            _coroutine_queue.pop();
-            lock.unlock();
-
-            process_coroutine_operation(op);
-
-            lock.lock();
+        try {
+            CoroutineOperation op(FCOpType::TAG_SEND); // Default initialization
+            // BlockingQueue::read() will block until an operation is available
+            if (_coroutine_queue.read(op)) {
+                // Check shutdown again after reading
+                if (!_shutdown_requested.load()) {
+                    process_coroutine_operation(op);
+                }
+            }
+        } catch (const std::exception& e) {
+            std::cout << "FastChannelManager: Exception in request_thread_func: " << e.what() << std::endl;
+            // Continue processing other operations
         }
     }
-
 }
 
 void FastChannelManager::state_machine_thread_func() {
@@ -393,6 +381,12 @@ void FastChannelManager::state_machine_thread_func() {
 
 void FastChannelManager::process_coroutine_operation(const CoroutineOperation& op) {
     try {
+        // Validate coroutine handle before processing
+        if (!op.handle || op.handle.done()) {
+            std::cerr << "FastChannelManager: Invalid or completed coroutine handle" << std::endl;
+            return;
+        }
+
         switch (op.type) {
             case FCOpType::TAG_SEND: {
                 if (!_endpoint) {
@@ -400,12 +394,15 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                     if (op.result_ptr) {
                         *op.result_ptr = FCOpResult(FCResult::DISCONNECTED, 0);
                     }
-                    op.handle.resume();
+                    // Safe resume with validation
+                    safe_resume_coroutine(op.handle);
                     return;
                 }
 
                 _active_send_request = _endpoint->tagSend(op.data, op.size, ucxx::Tag{op.tag});
-                _active_send_op = const_cast<CoroutineOperation*>(&op);
+                // Store a copy of the operation to avoid dangling pointer
+                _active_send_op_storage = op;
+                _active_send_op = &_active_send_op_storage;
                 notify_state_change(FCState::SENDING);
                 break;
             }
@@ -415,12 +412,14 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                     if (op.result_ptr) {
                         *op.result_ptr = FCOpResult(FCResult::DISCONNECTED, 0);
                     }
-                    op.handle.resume();
+                    safe_resume_coroutine(op.handle);
                     return;
                 }
 
                 _active_recv_request = _endpoint->tagRecv(op.data, op.size, ucxx::Tag{op.tag}, ucxx::TagMaskFull);
-                _active_recv_op = const_cast<CoroutineOperation*>(&op);
+                // Store a copy of the operation to avoid dangling pointer
+                _active_recv_op_storage = op;
+                _active_recv_op = &_active_recv_op_storage;
                 notify_state_change(FCState::RECEIVING);
                 break;
             }
@@ -454,7 +453,7 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                     }
                 }
 
-                op.handle.resume();
+                safe_resume_coroutine(op.handle);
                 break;
             }
 
@@ -467,7 +466,7 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                 if (op.result_ptr) {
                     *op.result_ptr = FCOpResult(FCResult::SUCCESS, 0);
                 }
-                op.handle.resume();
+                safe_resume_coroutine(op.handle);
                 break;
             }
 
@@ -476,7 +475,7 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                 if (op.result_ptr) {
                     *op.result_ptr = FCOpResult(FCResult::SUCCESS, 0);
                 }
-                op.handle.resume();
+                safe_resume_coroutine(op.handle);
                 break;
             }
         }
@@ -485,7 +484,7 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
         if (op.result_ptr) {
             *op.result_ptr = FCOpResult(FCResult::FAILURE, 0);
         }
-        op.handle.resume();
+        safe_resume_coroutine(op.handle);
     }
 }
 
@@ -514,14 +513,14 @@ void FastChannelManager::handle_sending_state() {
                 *_active_send_op->result_ptr = FCOpResult(FCResult::SUCCESS, _active_send_op->size);
             }
             if (_active_send_op) {
-                _active_send_op->handle.resume();
+                safe_resume_coroutine(_active_send_op->handle);
             }
         } catch (const std::exception& e) {
             if (_active_send_op && _active_send_op->result_ptr) {
                 *_active_send_op->result_ptr = FCOpResult(FCResult::FAILURE, 0);
             }
             if (_active_send_op) {
-                _active_send_op->handle.resume();
+                safe_resume_coroutine(_active_send_op->handle);
             }
         }
 
@@ -539,7 +538,7 @@ void FastChannelManager::handle_receiving_state() {
                 *_active_recv_op->result_ptr = FCOpResult(FCResult::SUCCESS, _active_recv_op->size);
             }
             if (_active_recv_op) {
-                _active_recv_op->handle.resume();
+                safe_resume_coroutine(_active_recv_op->handle);
             }
         } catch (const std::exception& e) {
             std::cerr << "FastChannelManager: Receive operation failed: " << e.what() << std::endl;
@@ -547,7 +546,7 @@ void FastChannelManager::handle_receiving_state() {
                 *_active_recv_op->result_ptr = FCOpResult(FCResult::FAILURE, 0);
             }
             if (_active_recv_op) {
-                _active_recv_op->handle.resume();
+                safe_resume_coroutine(_active_recv_op->handle);
             }
         }
 
@@ -561,6 +560,21 @@ void FastChannelManager::handle_error_state() {
     std::cerr << "FastChannelManager: In error state, attempting recovery" << std::endl;
     // Could implement error recovery logic here
     notify_state_change(FCState::IDLE);
+}
+
+void FastChannelManager::safe_resume_coroutine(std::coroutine_handle<> handle) {
+    try {
+        // Check if handle is valid and not already completed
+        if (handle && !handle.done()) {
+            handle.resume();
+        } else {
+            std::cerr << "FastChannelManager: Attempted to resume invalid or completed coroutine" << std::endl;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "FastChannelManager: Exception during coroutine resume: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "FastChannelManager: Unknown exception during coroutine resume" << std::endl;
+    }
 }
 
 } // namespace btsp

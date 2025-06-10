@@ -7,9 +7,8 @@
 #include <ucxx/buffer.h>
 #include <ucxx/utils/sockaddr.h>
 #include <ucxx/utils/ucx.h>
-#include <queue>
+#include "pcq.hpp"
 #include <mutex>
-#include <condition_variable>
 #include <thread>
 #include <atomic>
 #include <string>
@@ -79,7 +78,7 @@ public:
         }
 
         std::suspend_never initial_suspend() { return {}; }
-        std::suspend_always final_suspend() noexcept { return {}; }
+        std::suspend_never final_suspend() noexcept { return {}; }
 
         void unhandled_exception() {
             exception = std::current_exception();
@@ -95,9 +94,8 @@ public:
     FCTask(handle_type h) : handle(h) {}
     
     ~FCTask() {
-        if (handle) {
-            handle.destroy();
-        }
+        // No need to destroy handle since final_suspend() returns suspend_never
+        // The coroutine will auto-destroy when it completes
     }
     
     // Move-only type
@@ -110,9 +108,7 @@ public:
     
     FCTask& operator=(FCTask&& other) noexcept {
         if (this != &other) {
-            if (handle) {
-                handle.destroy();
-            }
+            // No need to destroy handle since final_suspend() returns suspend_never
             handle = other.handle;
             other.handle = {};
         }
@@ -154,7 +150,7 @@ public:
         }
 
         std::suspend_never initial_suspend() { return {}; }
-        std::suspend_always final_suspend() noexcept { return {}; }
+        std::suspend_never final_suspend() noexcept { return {}; }
 
         void unhandled_exception() {
             exception = std::current_exception();
@@ -168,9 +164,8 @@ public:
     FCTask(handle_type h) : handle(h) {}
 
     ~FCTask() {
-        if (handle) {
-            handle.destroy();
-        }
+        // No need to destroy handle since final_suspend() returns suspend_never
+        // The coroutine will auto-destroy when it completes
     }
 
     // Move-only type
@@ -183,9 +178,7 @@ public:
 
     FCTask& operator=(FCTask&& other) noexcept {
         if (this != &other) {
-            if (handle) {
-                handle.destroy();
-            }
+            // No need to destroy handle since final_suspend() returns suspend_never
             handle = other.handle;
             other.handle = {};
         }
@@ -334,10 +327,13 @@ private:
     // Request processing
     void process_coroutine_operation(const CoroutineOperation& op);
     void submit_coroutine_operation(CoroutineOperation op);
-    
+
     // State change notification
     void notify_state_change(FCState new_state);
     void resume_state_waiters(FCState new_state);
+
+    // Coroutine safety
+    void safe_resume_coroutine(std::coroutine_handle<> handle);
     
     // Listener callback (static)
     static void listener_callback(ucp_conn_request_h conn_request, void* arg);
@@ -354,9 +350,7 @@ private:
     std::thread _state_machine_thread;
     
     // Operation queue for coroutines
-    std::queue<CoroutineOperation> _coroutine_queue;
-    std::mutex _queue_mutex;
-    std::condition_variable _queue_cv;
+    BlockingQueue<CoroutineOperation> _coroutine_queue;
     
     // State waiters
     std::vector<StateWaiter> _state_waiters;
@@ -376,6 +370,10 @@ private:
     std::shared_ptr<ucxx::Request> _active_recv_request;
     CoroutineOperation* _active_send_op{nullptr};
     CoroutineOperation* _active_recv_op{nullptr};
+
+    // Storage for active operations to avoid dangling pointers
+    CoroutineOperation _active_send_op_storage;
+    CoroutineOperation _active_recv_op_storage;
 };
 
 // Global instance management (optional)
