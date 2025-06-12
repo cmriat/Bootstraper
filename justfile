@@ -22,3 +22,6 @@ runc:
 
 clean:
     rm -rf {{ build_dir }}
+
+killcs:
+    ps -ef | grep {{ example_bin }} | grep -v grep | awk '{print $2}' | xargs -r kill -9
