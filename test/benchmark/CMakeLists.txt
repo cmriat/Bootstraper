@@ -4,7 +4,7 @@ add_executable(buffer_allocation_benchmark
     buffer_allocation_benchmark.cpp
 )
 
-target_include_directories(buffer_allocation_benchmark PRIVATE 
+target_include_directories(buffer_allocation_benchmark PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
 
@@ -24,9 +24,41 @@ if(CUDA_FOUND)
     target_compile_definitions(buffer_allocation_benchmark PRIVATE CUDA_AVAILABLE)
 endif()
 
-target_compile_options(buffer_allocation_benchmark PRIVATE 
+target_compile_options(buffer_allocation_benchmark PRIVATE
     -Wall -Wextra -Wno-unused-parameter -g -O2 -std=c++20
 )
+
+
+# CUDA IPC Tag Send/Recv Benchmark
+add_executable(cuda_ipc_tag_benchmark
+    cuda_ipc_tag_benchmark.cpp
+    ${CMAKE_SOURCE_DIR}/src/fast_channel_manager.cpp
+)
+
+target_include_directories(cuda_ipc_tag_benchmark PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(cuda_ipc_tag_benchmark
+    benchmark::benchmark
+    ucxx::ucxx
+    glog::glog
+    fmt::fmt
+    Threads::Threads
+    Folly::folly
+    ${CMAKE_DL_LIBS}
+)
+
+if(CUDA_FOUND)
+    target_link_libraries(cuda_ipc_tag_benchmark ${CUDA_LIBRARIES})
+    target_include_directories(cuda_ipc_tag_benchmark PRIVATE ${CUDA_INCLUDE_DIRS})
+    target_compile_definitions(cuda_ipc_tag_benchmark PRIVATE CUDA_AVAILABLE)
+endif()
+
+target_compile_options(cuda_ipc_tag_benchmark PRIVATE
+    -Wall -Wextra -Wno-unused-parameter -g -O2 -std=c++20
+)
+
 
 set_target_properties(buffer_allocation_benchmark PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build/bin
