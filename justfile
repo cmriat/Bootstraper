@@ -1,5 +1,5 @@
 build_dir := "build"
-example_bin := "bin/server"
+example_bin := "bin/tensor_transfer_demo"
 
 build:
     rm -rf {{ build_dir }} && \
@@ -14,11 +14,11 @@ quick:
 
 runs:
     cd {{ build_dir }} && \
-    ./{{ example_bin }} --port 10000
+    ./{{ example_bin }} --port 10000 --cuda-device 0
 
 runc:
     cd {{ build_dir }} && \
-    ./{{ example_bin }} --server 127.0.0.1 --port 10000
+    ./{{ example_bin }} --server 127.0.0.1 --port 10000 --cuda-device 1
 
 clean:
     rm -rf {{ build_dir }}

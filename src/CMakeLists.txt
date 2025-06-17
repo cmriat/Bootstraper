@@ -14,6 +14,12 @@ target_link_libraries(server
     glog::glog
 )
 
+# Add CUDA libraries if available
+if(CUDA_FOUND)
+    target_link_libraries(server ${CUDA_LIBRARIES})
+    target_include_directories(server PRIVATE ${CUDA_INCLUDE_DIRS})
+endif()
+
 target_compile_options(server PRIVATE -Wall -Wextra -Wno-unused-parameter -g -O0 -std=c++20)
 
 add_executable(tensor_transfer_demo
@@ -31,5 +37,11 @@ target_link_libraries(tensor_transfer_demo
     Folly::folly
     glog::glog
 )
+
+# Add CUDA libraries if available
+if(CUDA_FOUND)
+    target_link_libraries(tensor_transfer_demo ${CUDA_LIBRARIES})
+    target_include_directories(tensor_transfer_demo PRIVATE ${CUDA_INCLUDE_DIRS})
+endif()
 
 target_compile_options(tensor_transfer_demo PRIVATE -Wall -Wextra -Wno-unused-parameter -g -O0 -std=c++20)

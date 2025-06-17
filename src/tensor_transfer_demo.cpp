@@ -9,6 +9,10 @@
 #include <fmt/base.h>
 #include <sstream>
 
+#ifdef CUDA_AVAILABLE
+#include <cuda_runtime.h>
+#endif
+
 #include "commom.hpp"
 #include "log_utils.hpp"
 #include "fast_channel_manager.hpp"
@@ -38,13 +42,32 @@ btsp::FCTask<void> server_recv_tensor_data(btsp::FastChannelManager& manager, si
 
     if (result.success()) {
         RDMA_LOG_INFO("Successfully received tensor data: {} bytes", result.bytes_transferred);
-        
+
+        // To read GPU memory, we need to copy it to host first
         if (received_tensor_spec.data_type == DataType::FLOAT32 && tensor_size >= sizeof(float)) {
+#ifdef CUDA_AVAILABLE
+            // Copy a few elements from GPU to host to verify the data
+            size_t sample_size = std::min(tensor_size, 3 * sizeof(float));
+            std::vector<float> host_sample(sample_size / sizeof(float));
+
+            cudaError_t err = cudaMemcpy(host_sample.data(), tensor_buffer->data(),
+                                       sample_size, cudaMemcpyDeviceToHost);
+            if (err == cudaSuccess) {
+                RDMA_LOG_INFO("GPU Sample tensor values: {}, {}, {}",
+                             host_sample.size() > 0 ? host_sample[0] : 0.0f,
+                             host_sample.size() > 1 ? host_sample[1] : 0.0f,
+                             host_sample.size() > 2 ? host_sample[2] : 0.0f);
+            } else {
+                RDMA_LOG_ERROR("Failed to copy sample data from GPU: {}", cudaGetErrorString(err));
+            }
+#else
+            // If CUDA is not available, try direct access (shouldn't happen with RMM)
             float* data = static_cast<float*>(tensor_buffer->data());
-            RDMA_LOG_INFO("Sample tensor values: {}, {}, {}", 
-                         data[0], 
+            RDMA_LOG_INFO("CPU Sample tensor values: {}, {}, {}",
+                         data[0],
                          tensor_size >= 2*sizeof(float) ? data[1] : 0.0f,
                          tensor_size >= 3*sizeof(float) ? data[2] : 0.0f);
+#endif
         }
     } else {
         RDMA_LOG_ERROR("Failed to receive tensor data");
@@ -59,31 +82,70 @@ btsp::FCTask<void> client_send_tensor_data(btsp::FastChannelManager& manager, co
     size_t tensor_size = spec.total_bytes();
     
     // Create and fill tensor data (demo data)
-    auto client_buffer = ucxx::allocateBuffer(ucxx::BufferType::Host, tensor_size);
-    
+    RDMA_LOG_INFO("Allocating buffer for tensor data: {} bytes", tensor_size);
+    auto client_buffer = ucxx::allocateBuffer(ucxx::BufferType::RMM, tensor_size);
+    RDMA_LOG_INFO("Successfully allocated buffer for tensor data");
+
     // Fill with demo data based on data type
+    // Note: RMM buffer is GPU memory, we need to use CUDA memcpy to fill it
     if (spec.data_type == DataType::FLOAT32) {
-        float* data = static_cast<float*>(client_buffer->data());
         size_t num_elements = tensor_size / sizeof(float);
+
+        // Create host buffer and fill with demo data
+        std::vector<float> host_data(num_elements);
         for (size_t i = 0; i < num_elements; ++i) {
-            data[i] = static_cast<float>(i * 0.1f);  // Demo values: 0.0, 0.1, 0.2, ...
+            host_data[i] = static_cast<float>(i * 0.1f);  // Demo values: 0.0, 0.1, 0.2, ...
         }
+
+#ifdef CUDA_AVAILABLE
+        // Copy from host to device
+        cudaError_t err = cudaMemcpy(client_buffer->data(), host_data.data(),
+                                   tensor_size, cudaMemcpyHostToDevice);
+        RDMA_LOG_INFO("Copied tensor data to GPU");
+        if (err != cudaSuccess) {
+            RDMA_LOG_ERROR("Failed to copy data to GPU: {}", cudaGetErrorString(err));
+            co_return;
+        }
+#else
+        // If CUDA is not available, just copy directly (this shouldn't happen with RMM)
+        std::memcpy(client_buffer->data(), host_data.data(), tensor_size);
+        RDMA_LOG_WARNING("CUDA not available, using direct memcpy for tensor data");
+#endif
+
         RDMA_LOG_INFO("Filled tensor with {} float32 elements", num_elements);
+
     } else if (spec.data_type == DataType::INT32) {
-        int32_t* data = static_cast<int32_t*>(client_buffer->data());
         size_t num_elements = tensor_size / sizeof(int32_t);
+
+        // Create host buffer and fill with demo data
+        std::vector<int32_t> host_data(num_elements);
         for (size_t i = 0; i < num_elements; ++i) {
-            data[i] = static_cast<int32_t>(i);  // Demo values: 0, 1, 2, ...
+            host_data[i] = static_cast<int32_t>(i);  // Demo values: 0, 1, 2, ...
         }
+
+#ifdef CUDA_AVAILABLE
+        // Copy from host to device
+        cudaError_t err = cudaMemcpy(client_buffer->data(), host_data.data(),
+                                   tensor_size, cudaMemcpyHostToDevice);
+        if (err != cudaSuccess) {
+            RDMA_LOG_ERROR("Failed to copy data to GPU: {}", cudaGetErrorString(err));
+            co_return;
+        }
+#else
+        // If CUDA is not available, just copy directly (this shouldn't happen with RMM)
+        std::memcpy(client_buffer->data(), host_data.data(), tensor_size);
+#endif
+
         RDMA_LOG_INFO("Filled tensor with {} int32 elements", num_elements);
     }
 
+    RDMA_LOG_INFO("Sending tensor data via RDMA...");
     btsp::FCOpResult result = co_await manager.tag_send(
         client_buffer->data(),
         tensor_size,
         100  // Use tag 100 for tensor data
     );
-
+    RDMA_LOG_INFO("RDMA send operation completed");
     if (result.success()) {
         RDMA_LOG_INFO("Successfully sent tensor data: {} bytes", result.bytes_transferred);
     } else {
@@ -92,13 +154,13 @@ btsp::FCTask<void> client_send_tensor_data(btsp::FastChannelManager& manager, co
     co_return;
 }
 
-future<> run_client(const std::string& server_addr, uint16_t rpc_port, uint16_t rdma_port) {
+future<> run_client(const std::string& server_addr, uint16_t rpc_port, uint16_t rdma_port, int cuda_device_id = -1) {
     auto manager = std::make_shared<btsp::FastChannelManager>();
     RPC_LOG_INFO("Connecting to RPC server {}:{}", server_addr, rpc_port);
     RDMA_LOG_INFO("Connecting to RDMA server {}:{}", server_addr, rdma_port);
-    
+
     // Initialize RDMA manager as client
-    if (!manager->initialize(false, 0)) {
+    if (!manager->initialize(false, 0, cuda_device_id)) {
         BTSP_LOG_ERROR("Failed to initialize RDMA manager");
         co_return;
     }
@@ -170,10 +232,10 @@ future<> run_client(const std::string& server_addr, uint16_t rpc_port, uint16_t 
     co_return;
 }
 
-future<> run_server(uint16_t rpc_port, uint16_t rdma_port) {
+future<> run_server(uint16_t rpc_port, uint16_t rdma_port, int cuda_device_id = -1) {
     auto manager = std::make_shared<btsp::FastChannelManager>();
 
-    if (!manager->initialize(true, rdma_port)) {
+    if (!manager->initialize(true, rdma_port, cuda_device_id)) {
         BTSP_LOG_ERROR("Failed to initialize RDMA manager");
         co_return;
     }
@@ -199,7 +261,7 @@ future<> run_server(uint16_t rpc_port, uint16_t rdma_port) {
 
             try {
                 // Allocate RMM buffer for the tensor
-                tensor_buffer = ucxx::allocateBuffer(ucxx::BufferType::Host, spec.total_bytes());
+                tensor_buffer = ucxx::allocateBuffer(ucxx::BufferType::RMM, spec.total_bytes());
 
                 RPC_LOG_INFO("Successfully allocated buffer: {} bytes", tensor_buffer->getSize());
 
@@ -238,11 +300,11 @@ future<> run_server(uint16_t rpc_port, uint16_t rdma_port) {
 
 int main(int ac, char** av) {
     btsp::LogWrapper::init(av[0]);
-
     app_template app;
     app.add_options()
         ("port", bpo::value<uint16_t>()->default_value(10000), "RPC server port")
         ("server", bpo::value<sstring>(), "Server address")
+        ("cuda-device", bpo::value<int>()->default_value(-1), "CUDA device ID (-1 for auto)")
         ("v", bpo::value<int>()->default_value(0), "Verbose logging level")
         ("log-dir", bpo::value<std::string>(), "Log directory");
 
@@ -253,6 +315,7 @@ int main(int ac, char** av) {
     app.run(ac, av, [&app] {
         auto&& config = app.configuration();
         uint16_t port = config["port"].as<uint16_t>();
+        int cuda_device_id = config["cuda-device"].as<int>();
 
         if (config.count("v")) {
             btsp::LogWrapper::set_verbose_level(config["v"].as<int>());
@@ -263,12 +326,14 @@ int main(int ac, char** av) {
         }
 
         if (config.count("server")) {
-            BTSP_LOG_INFO("Starting client mode, connecting to {}:{}",
-                         config["server"].as<sstring>(), port);
-            return run_client(config["server"].as<sstring>(), port, rdma_port);
+            BTSP_LOG_INFO("Starting client mode, connecting to {}:{} with CUDA device {}",
+                         config["server"].as<sstring>(), port,
+                         cuda_device_id == -1 ? "auto" : std::to_string(cuda_device_id));
+            return run_client(config["server"].as<sstring>(), port, rdma_port, cuda_device_id);
         } else {
-            BTSP_LOG_INFO("Starting server mode on port {}", port);
-            return run_server(port, rdma_port);
+            BTSP_LOG_INFO("Starting server mode on port {} with CUDA device {}", port,
+                         cuda_device_id == -1 ? "auto" : std::to_string(cuda_device_id));
+            return run_server(port, rdma_port, cuda_device_id);
         }
     });
     return 0;

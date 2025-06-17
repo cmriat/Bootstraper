@@ -4,6 +4,10 @@
 #include <algorithm>
 #include <cstring>
 
+#ifdef CUDA_AVAILABLE
+#include <cuda_runtime.h>
+#endif
+
 namespace btsp {
 
 // Global instance
@@ -85,28 +89,43 @@ FastChannelManager::~FastChannelManager() {
     }
 }
 
-bool FastChannelManager::initialize(bool server_mode, uint16_t port) {
+bool FastChannelManager::initialize(bool server_mode, uint16_t port, int cuda_device_id) {
     std::cout << "FastChannelManager: Initializing in " << (server_mode ? "server" : "client") << " mode";
     if (server_mode) {
         std::cout << " on port " << port;
     }
+    if (cuda_device_id >= 0) {
+        std::cout << " with CUDA device " << cuda_device_id;
+    }
     std::cout << std::endl;
-    
+
     _server_mode = server_mode;
     _port = port;
-    
-    try {
-        _context = ucxx::createContext({}, ucxx::Context::defaultFeatureFlags);
-        _worker = _context->createWorker();
+    _cuda_device_id = cuda_device_id;
 
+    // Initialize CUDA device first to establish CUDA context
+    if (!initialize_cuda_context()) {
+        std::cerr << "FastChannelManager: Failed to initialize CUDA context" << std::endl;
+        return false;
+    }
+
+    try {
+        ucxx::ConfigMap config = {
+            {"TLS", "all"}
+        };
+        _context = ucxx::createContext(config, ucxx::Context::defaultFeatureFlags);
+        _worker = _context->createWorker();
+        if (_context->hasCudaSupport()) {
+            std::cout << "CUDA IPC support is available" << std::endl;
+        }
         // Start threads
         _running = true;
         _shutdown_requested = false;
-        
+
         _progress_thread = std::thread(&FastChannelManager::progress_thread_func, this);
         _request_thread = std::thread(&FastChannelManager::request_thread_func, this);
         _state_machine_thread = std::thread(&FastChannelManager::state_machine_thread_func, this);
-        
+
         // If server mode, start listening
         if (server_mode && port > 0) {
             _listener = _worker->createListener(port, listener_callback, this);
@@ -288,15 +307,15 @@ FastChannelManager& get_global_coroutine_rdma_manager() {
     return *g_coroutine_rdma_manager;
 }
 
-bool initialize_global_coroutine_rdma_manager(bool server_mode, uint16_t port) {
+bool initialize_global_coroutine_rdma_manager(bool server_mode, uint16_t port, int cuda_device_id) {
     std::lock_guard<std::mutex> lock(g_coroutine_manager_mutex);
     if (g_coroutine_rdma_manager) {
         std::cout << "Global coroutine RDMA manager already initialized" << std::endl;
         return true;
     }
-    
+
     g_coroutine_rdma_manager = std::make_unique<FastChannelManager>();
-    return g_coroutine_rdma_manager->initialize(server_mode, port);
+    return g_coroutine_rdma_manager->initialize(server_mode, port, cuda_device_id);
 }
 
 void shutdown_global_coroutine_rdma_manager() {
@@ -309,6 +328,9 @@ void shutdown_global_coroutine_rdma_manager() {
 
 // Thread function implementations
 void FastChannelManager::progress_thread_func() {
+    // Set up CUDA context for this thread
+    setup_cuda_context_for_thread();
+
     while (!_shutdown_requested.load()) {
         if (_worker) {
             try {
@@ -324,6 +346,9 @@ void FastChannelManager::progress_thread_func() {
 }
 
 void FastChannelManager::request_thread_func() {
+    // Set up CUDA context for this thread
+    setup_cuda_context_for_thread();
+
     while (!_shutdown_requested.load()) {
         try {
             CoroutineOperation op(FCOpType::TAG_SEND); // Default initialization
@@ -342,6 +367,9 @@ void FastChannelManager::request_thread_func() {
 }
 
 void FastChannelManager::state_machine_thread_func() {
+    // Set up CUDA context for this thread
+    setup_cuda_context_for_thread();
+
     while (!_shutdown_requested.load()) {
         FCState current_state = _current_state.load();
 
@@ -575,6 +603,119 @@ void FastChannelManager::safe_resume_coroutine(std::coroutine_handle<> handle) {
     } catch (...) {
         std::cerr << "FastChannelManager: Unknown exception during coroutine resume" << std::endl;
     }
+}
+
+// CUDA context initialization functions
+bool FastChannelManager::initialize_cuda_context() {
+#ifdef CUDA_AVAILABLE
+    try {
+        // Get device count
+        int device_count = 0;
+        cudaError_t err = cudaGetDeviceCount(&device_count);
+        if (err != cudaSuccess) {
+            std::cerr << "FastChannelManager: Failed to get CUDA device count: "
+                      << cudaGetErrorString(err) << std::endl;
+            return false;
+        }
+
+        if (device_count == 0) {
+            std::cerr << "FastChannelManager: No CUDA devices found" << std::endl;
+            return false;
+        }
+
+        std::cout << "FastChannelManager: Found " << device_count << " CUDA device(s)" << std::endl;
+
+        // Determine which device to use
+        if (_cuda_device_id == -1) {
+            // Use device 0 by default, or get from environment variable
+            _cuda_device_id = 0;
+            const char* cuda_device_env = std::getenv("CUDA_VISIBLE_DEVICES");
+            if (cuda_device_env) {
+                try {
+                    _cuda_device_id = std::stoi(cuda_device_env);
+                } catch (const std::exception& e) {
+                    std::cerr << "FastChannelManager: Invalid CUDA_VISIBLE_DEVICES value, using device 0" << std::endl;
+                    _cuda_device_id = 0;
+                }
+            }
+        }
+
+        // Validate device ID
+        if (_cuda_device_id < 0 || _cuda_device_id >= device_count) {
+            std::cerr << "FastChannelManager: Invalid CUDA device ID " << _cuda_device_id
+                      << ", available devices: 0-" << (device_count - 1) << std::endl;
+            return false;
+        }
+
+        // Set the CUDA device
+        err = cudaSetDevice(_cuda_device_id);
+        if (err != cudaSuccess) {
+            std::cerr << "FastChannelManager: Failed to set CUDA device " << _cuda_device_id
+                      << ": " << cudaGetErrorString(err) << std::endl;
+            return false;
+        }
+
+        // Get device properties for information
+        cudaDeviceProp prop;
+        err = cudaGetDeviceProperties(&prop, _cuda_device_id);
+        if (err == cudaSuccess) {
+            std::cout << "FastChannelManager: Using CUDA device " << _cuda_device_id
+                      << ": " << prop.name << " (Compute Capability: "
+                      << prop.major << "." << prop.minor << ")" << std::endl;
+        }
+
+        // Initialize CUDA context by allocating and freeing a small amount of memory
+        void* dummy_ptr = nullptr;
+        err = cudaMalloc(&dummy_ptr, 1);
+        if (err != cudaSuccess) {
+            std::cerr << "FastChannelManager: Failed to initialize CUDA context: "
+                      << cudaGetErrorString(err) << std::endl;
+            return false;
+        }
+        cudaFree(dummy_ptr);
+
+        std::cout << "FastChannelManager: Successfully initialized CUDA context on device "
+                  << _cuda_device_id << std::endl;
+        return true;
+
+    } catch (const std::exception& e) {
+        std::cerr << "FastChannelManager: Exception during CUDA initialization: " << e.what() << std::endl;
+        return false;
+    }
+#else
+    std::cout << "FastChannelManager: CUDA not available, skipping CUDA context initialization" << std::endl;
+    return true;  // Not an error if CUDA is not available
+#endif
+}
+
+void FastChannelManager::setup_cuda_context_for_thread() {
+#ifdef CUDA_AVAILABLE
+    try {
+        // Set the CUDA device for this thread
+        cudaError_t err = cudaSetDevice(_cuda_device_id);
+        if (err != cudaSuccess) {
+            std::cerr << "FastChannelManager: Failed to set CUDA device " << _cuda_device_id
+                      << " for thread: " << cudaGetErrorString(err) << std::endl;
+            return;
+        }
+
+        // Initialize CUDA context for this thread by allocating and freeing a small amount of memory
+        void* dummy_ptr = nullptr;
+        err = cudaMalloc(&dummy_ptr, 1);
+        if (err != cudaSuccess) {
+            std::cerr << "FastChannelManager: Failed to initialize CUDA context for thread: "
+                      << cudaGetErrorString(err) << std::endl;
+            return;
+        }
+        cudaFree(dummy_ptr);
+
+        std::cout << "FastChannelManager: Successfully set up CUDA context for thread on device "
+                  << _cuda_device_id << std::endl;
+
+    } catch (const std::exception& e) {
+        std::cerr << "FastChannelManager: Exception during thread CUDA setup: " << e.what() << std::endl;
+    }
+#endif
 }
 
 } // namespace btsp

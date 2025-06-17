@@ -36,6 +36,16 @@ find_package (Seastar REQUIRED)
 find_package (folly REQUIRED)
 find_package (glog REQUIRED)
 
+# Find CUDA
+find_package(CUDA QUIET)
+if(CUDA_FOUND)
+    enable_language(CUDA)
+    add_definitions(-DCUDA_AVAILABLE)
+    message(STATUS "CUDA found: ${CUDA_VERSION}")
+else()
+    message(STATUS "CUDA not found, building without CUDA support")
+endif()
+
 
 add_subdirectory(src)
 add_subdirectory(test/example)

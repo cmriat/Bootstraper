@@ -261,7 +261,7 @@ public:
     ~FastChannelManager();
 
     // Initialize the RDMA manager
-    bool initialize(bool server_mode = false, uint16_t port = 0);
+    bool initialize(bool server_mode = false, uint16_t port = 0, int cuda_device_id = -1);
     
     // Shutdown the RDMA manager
     void shutdown();
@@ -338,6 +338,10 @@ private:
     // Listener callback (static)
     static void listener_callback(ucp_conn_request_h conn_request, void* arg);
 
+    // CUDA context initialization
+    bool initialize_cuda_context();
+    void setup_cuda_context_for_thread();
+
     // UCXX resources
     std::shared_ptr<ucxx::Context> _context;
     std::shared_ptr<ucxx::Worker> _worker;
@@ -364,6 +368,7 @@ private:
     // Configuration
     bool _server_mode{false};
     uint16_t _port{0};
+    int _cuda_device_id{0};
     
     // Active operations tracking
     std::shared_ptr<ucxx::Request> _active_send_request;
@@ -378,7 +383,7 @@ private:
 
 // Global instance management (optional)
 FastChannelManager& get_global_coroutine_rdma_manager();
-bool initialize_global_coroutine_rdma_manager(bool server_mode = false, uint16_t port = 0);
+bool initialize_global_coroutine_rdma_manager(bool server_mode = false, uint16_t port = 0, int cuda_device_id = -1);
 void shutdown_global_coroutine_rdma_manager();
 
 } // namespace btsp
