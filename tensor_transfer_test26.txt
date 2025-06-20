@@ -1,0 +1,601 @@
+cd build && UCX_TCP_CM_REUSEADDR=y ./bin/tensor_transfer --server 127.0.0.1 --port 10000 --cuda-device 1 -n 10 -w 3
+I20250619 09:45:31.309062 140217791868928 log_utils.hpp:32] Starting client mode, connecting to 127.0.0.1:10000 with CUDA device 1, 10 iterations, 3 warmup
+FastChannelManager: Constructor called
+I20250619 09:45:31.309155 140217791868928 log_utils.hpp:32] [RDMA] Connecting to RDMA server 127.0.0.1:10000
+FastChannelManager: Initializing in client mode with CUDA device 1
+FastChannelManager: Found 2 CUDA device(s)
+FastChannelManager: Using CUDA device 1: NVIDIA H800 (Compute Capability: 9.0)
+FastChannelManager: Successfully initialized CUDA context on device 1
+FastChannelManager: Creating UCX context with CUDA transports
+CUDA IPC support is available
+#
+# UCP context
+#
+#     component 0  :  self
+#     component 1  :  tcp
+#     component 2  :  sysv
+#     component 3  :  posix
+#     component 4  :  cuda_cpy
+#     component 5  :  cuda_ipc
+#     component 6  :  ib
+#     component 7  :  gga
+#     component 8  :  rdmacm
+#     component 9  :  cma
+#
+#            md 0  :  component 1  tcp 
+#            md 1  :  component 4  cuda_cpy 
+#            md 2  :  component 5  cuda_ipc 
+#
+#      resource 0  :  md 0  dev 0  flags -- tcp/eth0
+#      resource 1  :  md 0  dev 1  flags -- tcp/eth1
+#      resource 2  :  md 0  dev 2  flags -- tcp/eth2
+#      resource 3  :  md 0  dev 3  flags -- tcp/eth3
+#      resource 4  :  md 0  dev 4  flags -- tcp/eth4
+#      resource 5  :  md 0  dev 5  flags -- tcp/eth5
+#      resource 6  :  md 0  dev 6  flags -- tcp/eth6
+#      resource 7  :  md 0  dev 7  flags -- tcp/eth7
+#      resource 8  :  md 0  dev 8  flags -- tcp/eth8
+#      resource 9  :  md 0  dev 9  flags -- tcp/lo
+#      resource 10 :  md 0  dev 10 flags -- tcp/tunl0
+#      resource 11 :  md 1  dev 11 flags -- cuda_copy/cuda
+#      resource 12 :  md 2  dev 11 flags -- cuda_ipc/cuda
+#
+
+I20250619 09:45:32.074785 140217791868928 log_utils.hpp:32] [RDMA] Sending tensor - Shape: [16384, 16384], Type: 0, Size: 1073741824 bytes
+I20250619 09:45:32.074808 140217791868928 log_utils.hpp:32] [RDMA] Buffer type: FLOAT32 with incremental values
+I20250619 09:45:32.074814 140217791868928 log_utils.hpp:32] [RDMA] Test configuration - Warmup iterations: 3, Test iterations: 10
+I20250619 09:45:32.074819 140217791868928 log_utils.hpp:37] [RDMA] Starting warmup iterations...
+I20250619 09:45:32.074826 140217791868928 log_utils.hpp:32] [RDMA] Warmup iteration 1/3
+FastChannelManager: Successfully set up CUDA context for thread on device 1
+FastChannelManager: Successfully set up CUDA context for thread on device 1
+FastChannelManager: State changed from 0 to 2
+FastChannelManager: Creating new endpoint connection to 127.0.0.1:10000
+FastChannelManager: Successfully set up CUDA context for thread on device 1
+FastChannelManager: Successfully connected to 127.0.0.1:10000
+FastChannelManager: State changed from 2 to 3
+I20250619 09:45:32.576640 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:45:32.576655 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:45:32.579934 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:45:34.518081 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:45:34.518130 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:45:34.576954 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:45:34.576980 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326334576977 us
+FastChannelManager: Processing tagSend operation at 1750326334577003 us
+FastChannelManager: UCX tagSend() call took 12427 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 8 us
+FastChannelManager: UCX tagSend completion detected at 1750326334618316 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 41303 us, bandwidth: 24.2113 GB/s, bytes: 1073741824
+I20250619 09:45:34.618844 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326334618839 us
+I20250619 09:45:34.618858 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:45:34.618863 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:45:34.618869 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:45:34.618873 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 41861.000 us
+I20250619 09:45:34.618895 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 23.888584 GB/s
+I20250619 09:45:34.618901 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 24461.910 MB/s
+I20250619 09:45:34.618906 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:45:34.618911 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 8 us
+2. UCX tagSend() call: 12427 us
+3. notify_state_change() overhead: 8 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: 43 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -1.75033e+15 us
+Total: 41303 us
+=================================================
+FastChannelManager: Coroutine resumed in 466 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:45:37.074941 140217791868928 log_utils.hpp:32] [RDMA] Warmup iteration 1 completed
+I20250619 09:45:37.175054 140217791868928 log_utils.hpp:32] [RDMA] Warmup iteration 2/3
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:45:37.175176 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:45:37.175190 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:45:37.175690 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:45:38.980271 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:45:38.980312 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:45:39.038734 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:45:39.038756 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326339038755 us
+FastChannelManager: Processing tagSend operation at 1750326339038781 us
+FastChannelManager: UCX tagSend() call took 130 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 7 us
+FastChannelManager: UCX tagSend completion detected at 1750326339062419 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 23629 us, bandwidth: 42.3209 GB/s, bytes: 1073741824
+I20250619 09:45:39.062487 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326339062480 us
+I20250619 09:45:39.062503 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:45:39.062508 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:45:39.062515 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:45:39.062522 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 23724.000 us
+I20250619 09:45:39.062531 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 42.151408 GB/s
+I20250619 09:45:39.062537 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 43163.042 MB/s
+I20250619 09:45:39.062543 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:45:39.062548 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 130 us
+3. notify_state_change() overhead: 7 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -4.44941e+06 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -4.44312e+06 us
+Total: 23629 us
+=================================================
+FastChannelManager: Coroutine resumed in 398 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:45:42.175199 140217791868928 log_utils.hpp:32] [RDMA] Warmup iteration 2 completed
+I20250619 09:45:42.275331 140217791868928 log_utils.hpp:32] [RDMA] Warmup iteration 3/3
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:45:42.275468 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:45:42.275485 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:45:42.276228 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:45:44.098199 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:45:44.098268 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:45:44.159567 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:45:44.159601 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326344159600 us
+FastChannelManager: Processing tagSend operation at 1750326344159624 us
+FastChannelManager: UCX tagSend() call took 155 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 8 us
+FastChannelManager: UCX tagSend completion detected at 1750326344191100 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 31467 us, bandwidth: 31.7793 GB/s, bytes: 1073741824
+I20250619 09:45:44.191174 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326344191166 us
+I20250619 09:45:44.191190 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:45:44.191195 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:45:44.191201 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:45:44.191206 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 31566.000 us
+I20250619 09:45:44.191215 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 31.679655 GB/s
+I20250619 09:45:44.191219 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 32439.967 MB/s
+I20250619 09:45:44.191225 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:45:44.191230 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 8 us
+2. UCX tagSend() call: 155 us
+3. notify_state_change() overhead: 8 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -9.57028e+06 us
+5. Progress wait (until isCompleted): 9 us
+6. Coroutine resume overhead: -5.12822e+06 us
+Total: 31467 us
+=================================================
+FastChannelManager: Coroutine resumed in 454 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:45:47.275470 140217791868928 log_utils.hpp:32] [RDMA] Warmup iteration 3 completed
+I20250619 09:45:47.375588 140217791868928 log_utils.hpp:37] [RDMA] Warmup completed
+I20250619 09:45:47.375599 140217791868928 log_utils.hpp:37] [RDMA] Starting test iterations...
+I20250619 09:45:47.375604 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 1/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:45:47.375723 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:45:47.375739 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:45:47.376481 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:45:49.175589 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:45:49.175640 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:45:49.234337 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:45:49.234367 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326349234363 us
+FastChannelManager: Processing tagSend operation at 1750326349234394 us
+FastChannelManager: UCX tagSend() call took 155 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 6 us
+FastChannelManager: UCX tagSend completion detected at 1750326349251712 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 17307 us, bandwidth: 57.7801 GB/s, bytes: 1073741824
+I20250619 09:45:49.251790 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326349251780 us
+I20250619 09:45:49.251804 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:45:49.251810 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:45:49.251817 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:45:49.251823 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 17417.000 us
+I20250619 09:45:49.251833 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 57.415169 GB/s
+I20250619 09:45:49.251839 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 58793.133 MB/s
+I20250619 09:45:49.251845 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:45:49.251852 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 10 us
+2. UCX tagSend() call: 155 us
+3. notify_state_change() overhead: 6 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -1.46451e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.06009e+06 us
+Total: 17307 us
+=================================================
+FastChannelManager: Coroutine resumed in 484 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:45:52.375740 140217791868928 log_utils.hpp:32] [RDMA] Iteration 1 - Transfer time: 17417.000 us, Bandwidth: 57.415169 GB/s
+I20250619 09:45:52.475874 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 2/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:45:52.475983 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:45:52.476001 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:45:52.476647 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:45:54.271987 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:45:54.272043 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:45:54.335382 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:45:54.335414 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326354335413 us
+FastChannelManager: Processing tagSend operation at 1750326354335441 us
+FastChannelManager: UCX tagSend() call took 126 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 6 us
+FastChannelManager: UCX tagSend completion detected at 1750326354353846 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 18397 us, bandwidth: 54.3567 GB/s, bytes: 1073741824
+I20250619 09:45:54.353907 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326354353902 us
+I20250619 09:45:54.353921 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:45:54.353926 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:45:54.353932 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:45:54.353937 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 18488.000 us
+I20250619 09:45:54.353946 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 54.089139 GB/s
+I20250619 09:45:54.353952 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 55387.278 MB/s
+I20250619 09:45:54.353958 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:45:54.353963 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 126 us
+3. notify_state_change() overhead: 6 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -1.97461e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.10158e+06 us
+Total: 18397 us
+=================================================
+FastChannelManager: Coroutine resumed in 403 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:45:57.475982 140217791868928 log_utils.hpp:32] [RDMA] Iteration 2 - Transfer time: 18488.000 us, Bandwidth: 54.089139 GB/s
+I20250619 09:45:57.576097 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 3/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:45:57.576200 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:45:57.576213 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:45:57.576858 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:45:59.442361 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:45:59.442413 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:45:59.501283 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:45:59.501312 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326359501311 us
+FastChannelManager: Processing tagSend operation at 1750326359501335 us
+FastChannelManager: UCX tagSend() call took 119 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 8 us
+FastChannelManager: UCX tagSend completion detected at 1750326359524024 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 22681 us, bandwidth: 44.0898 GB/s, bytes: 1073741824
+I20250619 09:45:59.524087 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326359524081 us
+I20250619 09:45:59.524100 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:45:59.524105 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:45:59.524112 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:45:59.524116 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 22769.000 us
+I20250619 09:45:59.524125 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 43.919364 GB/s
+I20250619 09:45:59.524130 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 44973.429 MB/s
+I20250619 09:45:59.524136 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:45:59.524143 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 119 us
+3. notify_state_change() overhead: 8 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -2.4912e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.16972e+06 us
+Total: 22681 us
+=================================================
+FastChannelManager: Coroutine resumed in 417 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:46:02.576204 140217791868928 log_utils.hpp:32] [RDMA] Iteration 3 - Transfer time: 22769.000 us, Bandwidth: 43.919364 GB/s
+I20250619 09:46:02.676331 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 4/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:46:02.676441 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:46:02.676456 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:46:02.677110 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:46:04.483784 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:46:04.483846 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:46:04.542180 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:46:04.542206 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326364542205 us
+FastChannelManager: Processing tagSend operation at 1750326364542228 us
+FastChannelManager: UCX tagSend() call took 142 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 5 us
+FastChannelManager: UCX tagSend completion detected at 1750326364559189 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 16953 us, bandwidth: 58.9866 GB/s, bytes: 1073741824
+I20250619 09:46:04.559260 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326364559251 us
+I20250619 09:46:04.559275 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:46:04.559280 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:46:04.559290 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:46:04.559295 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 17046.000 us
+I20250619 09:46:04.559305 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 58.664789 GB/s
+I20250619 09:46:04.559312 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 60072.744 MB/s
+I20250619 09:46:04.559316 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:46:04.559321 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 142 us
+3. notify_state_change() overhead: 5 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -2.99529e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.03469e+06 us
+Total: 16953 us
+=================================================
+FastChannelManager: Coroutine resumed in 431 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:46:07.676444 140217791868928 log_utils.hpp:32] [RDMA] Iteration 4 - Transfer time: 17046.000 us, Bandwidth: 58.664789 GB/s
+I20250619 09:46:07.776551 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 5/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:46:07.776645 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:46:07.776656 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:46:07.777271 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:46:09.634660 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:46:09.634709 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:46:09.693540 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:46:09.693567 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326369693564 us
+FastChannelManager: Processing tagSend operation at 1750326369693591 us
+FastChannelManager: UCX tagSend() call took 132 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 5 us
+FastChannelManager: UCX tagSend completion detected at 1750326369710318 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 16718 us, bandwidth: 59.8158 GB/s, bytes: 1073741824
+I20250619 09:46:09.710385 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326369710375 us
+I20250619 09:46:09.710399 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:46:09.710403 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:46:09.710409 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:46:09.710413 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 16811.000 us
+I20250619 09:46:09.710422 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 59.484861 GB/s
+I20250619 09:46:09.710427 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 60912.498 MB/s
+I20250619 09:46:09.710432 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:46:09.710436 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 132 us
+3. notify_state_change() overhead: 5 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -3.51042e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.15064e+06 us
+Total: 16718 us
+=================================================
+FastChannelManager: Coroutine resumed in 460 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:46:12.776675 140217791868928 log_utils.hpp:32] [RDMA] Iteration 5 - Transfer time: 16811.000 us, Bandwidth: 59.484861 GB/s
+I20250619 09:46:12.876802 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 6/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:46:12.876905 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:46:12.876925 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:46:12.877574 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:46:14.671211 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:46:14.671264 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:46:14.729574 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:46:14.729599 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326374729598 us
+FastChannelManager: Processing tagSend operation at 1750326374729620 us
+FastChannelManager: UCX tagSend() call took 122 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 7 us
+FastChannelManager: UCX tagSend completion detected at 1750326374747762 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 18134 us, bandwidth: 55.145 GB/s, bytes: 1073741824
+I20250619 09:46:14.747822 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326374747817 us
+I20250619 09:46:14.747837 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:46:14.747842 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:46:14.747848 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:46:14.747853 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 18218.000 us
+I20250619 09:46:14.747863 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 54.890767 GB/s
+I20250619 09:46:14.747869 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 56208.146 MB/s
+I20250619 09:46:14.747874 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:46:14.747879 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 122 us
+3. notify_state_change() overhead: 7 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -4.01402e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.03693e+06 us
+Total: 18134 us
+=================================================
+FastChannelManager: Coroutine resumed in 402 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:46:17.876935 140217791868928 log_utils.hpp:32] [RDMA] Iteration 6 - Transfer time: 18218.000 us, Bandwidth: 54.890767 GB/s
+I20250619 09:46:17.977058 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 7/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:46:17.977180 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:46:17.977195 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:46:18.020948 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:46:19.816670 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:46:19.816718 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:46:19.874818 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:46:19.874845 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326379874844 us
+FastChannelManager: Processing tagSend operation at 1750326379874866 us
+FastChannelManager: UCX tagSend() call took 132 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 11 us
+FastChannelManager: UCX tagSend completion detected at 1750326379893690 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 18816 us, bandwidth: 53.1463 GB/s, bytes: 1073741824
+I20250619 09:46:19.893759 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326379893751 us
+I20250619 09:46:19.893773 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:46:19.893778 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:46:19.893784 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:46:19.893790 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 18907.000 us
+I20250619 09:46:19.893799 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 52.890464 GB/s
+I20250619 09:46:19.893803 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 54159.835 MB/s
+I20250619 09:46:19.893809 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:46:19.893814 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 132 us
+3. notify_state_change() overhead: 11 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 6 us
+4. State machine wait: -4.52855e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.14547e+06 us
+Total: 18816 us
+=================================================
+FastChannelManager: Coroutine resumed in 404 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:46:22.977198 140217791868928 log_utils.hpp:32] [RDMA] Iteration 7 - Transfer time: 18907.000 us, Bandwidth: 52.890464 GB/s
+I20250619 09:46:23.077327 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 8/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:46:23.077462 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:46:23.077477 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:46:23.078239 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:46:24.868496 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:46:24.868548 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:46:24.927283 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:46:24.927307 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326384927306 us
+FastChannelManager: Processing tagSend operation at 1750326384927329 us
+FastChannelManager: UCX tagSend() call took 147 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 5 us
+FastChannelManager: UCX tagSend completion detected at 1750326384944284 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 16947 us, bandwidth: 59.0075 GB/s, bytes: 1073741824
+I20250619 09:46:24.944356 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326384944348 us
+I20250619 09:46:24.944370 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:46:24.944376 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:46:24.944384 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:46:24.944389 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 17041.000 us
+I20250619 09:46:24.944399 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 58.682002 GB/s
+I20250619 09:46:24.944405 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 60090.370 MB/s
+I20250619 09:46:24.944410 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:46:24.944415 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 147 us
+3. notify_state_change() overhead: 5 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -5.0338e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.05013e+06 us
+Total: 16947 us
+=================================================
+FastChannelManager: Coroutine resumed in 434 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:46:28.077400 140217791868928 log_utils.hpp:32] [RDMA] Iteration 8 - Transfer time: 17041.000 us, Bandwidth: 58.682002 GB/s
+I20250619 09:46:28.177519 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 9/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:46:28.177629 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:46:28.177645 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:46:28.178292 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:46:30.007961 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:46:30.008018 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:46:30.067250 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:46:30.067283 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326390067279 us
+FastChannelManager: Processing tagSend operation at 1750326390067310 us
+FastChannelManager: UCX tagSend() call took 142 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 7 us
+FastChannelManager: UCX tagSend completion detected at 1750326390083709 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 16390 us, bandwidth: 61.0128 GB/s, bytes: 1073741824
+I20250619 09:46:30.083779 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326390083769 us
+I20250619 09:46:30.083793 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:46:30.083799 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:46:30.083805 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:46:30.083809 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 16489.000 us
+I20250619 09:46:30.083819 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 60.646492 GB/s
+I20250619 09:46:30.083824 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 62102.007 MB/s
+I20250619 09:46:30.083831 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:46:30.083836 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 8 us
+2. UCX tagSend() call: 142 us
+3. notify_state_change() overhead: 7 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -5.5478e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.13893e+06 us
+Total: 16390 us
+=================================================
+FastChannelManager: Coroutine resumed in 470 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:46:33.177649 140217791868928 log_utils.hpp:32] [RDMA] Iteration 9 - Transfer time: 16489.000 us, Bandwidth: 60.646492 GB/s
+I20250619 09:46:33.277772 140217791868928 log_utils.hpp:32] [RDMA] Test iteration 10/10
+FastChannelManager: State changed from 3 to 2
+FastChannelManager: Using existing endpoint connection
+FastChannelManager: State changed from 2 to 3
+I20250619 09:46:33.277880 140207991021568 log_utils.hpp:37] [RDMA] Connection established for tensor data transfer!
+I20250619 09:46:33.277898 140207991021568 log_utils.hpp:32] [RDMA] Allocating buffer for tensor data: 1073741824 bytes
+I20250619 09:46:33.278546 140207991021568 log_utils.hpp:37] [RDMA] Successfully allocated buffer for tensor data
+I20250619 09:46:35.065661 140207991021568 log_utils.hpp:37] [RDMA] Copied FLOAT32 tensor data to GPU
+I20250619 09:46:35.065710 140207991021568 log_utils.hpp:32] [RDMA] Filled tensor with 268435456 float32 elements
+I20250619 09:46:35.123599 140207991021568 log_utils.hpp:37] [RDMA] Sending tensor data via RDMA...
+I20250619 09:46:35.123624 140207991021568 log_utils.hpp:32] [RDMA] Starting tag_send operation at 1750326395123623 us
+FastChannelManager: Processing tagSend operation at 1750326395123645 us
+FastChannelManager: UCX tagSend() call took 117 us
+FastChannelManager: State changed from 3 to 4
+FastChannelManager: notify_state_change() took 6 us
+FastChannelManager: UCX tagSend completion detected at 1750326395142269 us
+FastChannelManager: CLIENT SEND - UCX operation duration: 18616 us, bandwidth: 53.7172 GB/s, bytes: 1073741824
+I20250619 09:46:35.142334 140207915520000 log_utils.hpp:32] [RDMA] Completed tag_send operation at 1750326395142328 us
+I20250619 09:46:35.142347 140207915520000 log_utils.hpp:37] [RDMA] RDMA send operation completed
+I20250619 09:46:35.142352 140207915520000 log_utils.hpp:32] [RDMA] Successfully sent tensor data: 1073741824 bytes
+I20250619 09:46:35.142358 140207915520000 log_utils.hpp:37] [RDMA] === CLIENT SEND PERFORMANCE (for bandwidth calculation) ===
+I20250619 09:46:35.142364 140207915520000 log_utils.hpp:32] [RDMA] Transfer time: 18704.000 us
+I20250619 09:46:35.142372 140207915520000 log_utils.hpp:32] [RDMA] Bandwidth: 53.464500 GB/s
+I20250619 09:46:35.142377 140207915520000 log_utils.hpp:32] [RDMA] Throughput: 54747.648 MB/s
+I20250619 09:46:35.142382 140207915520000 log_utils.hpp:32] [RDMA] Bytes transferred: 1073741824 bytes
+I20250619 09:46:35.142389 140207915520000 log_utils.hpp:37] [RDMA] ===========================================================
+=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===
+1. Queue processing overhead: 7 us
+2. UCX tagSend() call: 117 us
+3. notify_state_change() overhead: 6 us
+   - state.exchange(): 0 us
+   - resume_state_waiters(): 1 us
+4. State machine wait: -6.05343e+07 us
+5. Progress wait (until isCompleted): 0 us
+6. Coroutine resume overhead: -5.05803e+06 us
+Total: 18616 us
+=================================================
+FastChannelManager: Coroutine resumed in 400 us
+FastChannelManager: State changed from 4 to 3
+I20250619 09:46:38.277876 140217791868928 log_utils.hpp:32] [RDMA] Iteration 10 - Transfer time: 18704.000 us, Bandwidth: 53.464500 GB/s
+I20250619 09:46:38.377999 140217791868928 log_utils.hpp:37] [RDMA] === PERFORMANCE SUMMARY ===
+I20250619 09:46:38.378014 140217791868928 log_utils.hpp:32] [RDMA] Successful iterations: 10/10
+I20250619 09:46:38.378020 140217791868928 log_utils.hpp:32] [RDMA] Average transfer time: 18189.000 us
+I20250619 09:46:38.378029 140217791868928 log_utils.hpp:32] [RDMA] Average bandwidth: 55.414755 GB/s
+I20250619 09:46:38.378034 140217791868928 log_utils.hpp:32] [RDMA] Min/Max transfer time: 16489.000/22769.000 us
+I20250619 09:46:38.378040 140217791868928 log_utils.hpp:32] [RDMA] Min/Max bandwidth: 43.919364/60.646492 GB/s
+I20250619 09:46:38.378045 140217791868928 log_utils.hpp:37] [RDMA] ==========================
+I20250619 09:46:38.378050 140217791868928 log_utils.hpp:37] [RDMA] ========================================
+I20250619 09:46:38.378054 140217791868928 log_utils.hpp:37] [RDMA]        TENSOR TRANSFER PERFORMANCE     
+I20250619 09:46:38.378058 140217791868928 log_utils.hpp:37] [RDMA] ========================================
+I20250619 09:46:38.378062 140217791868928 log_utils.hpp:32] [RDMA] Tensor size: 1073741824 bytes (1.000 GB)
+I20250619 09:46:38.378067 140217791868928 log_utils.hpp:32] [RDMA] Data type: FLOAT32
+I20250619 09:46:38.378076 140217791868928 log_utils.hpp:32] [RDMA] Shape: [16384, 16384]
+I20250619 09:46:38.378082 140217791868928 log_utils.hpp:37] [RDMA] ----------------------------------------
+I20250619 09:46:38.378086 140217791868928 log_utils.hpp:37] [RDMA] CLIENT SEND METRICS (for bandwidth calculation):
+I20250619 09:46:38.378091 140217791868928 log_utils.hpp:32] [RDMA]   Transfer time: 18704.000 us
+I20250619 09:46:38.378097 140217791868928 log_utils.hpp:32] [RDMA]   Bandwidth: 53.464500 GB/s
+I20250619 09:46:38.378103 140217791868928 log_utils.hpp:32] [RDMA]   Throughput: 54747.648 MB/s
+I20250619 09:46:38.378108 140217791868928 log_utils.hpp:37] [RDMA] ----------------------------------------
+I20250619 09:46:38.378113 140217791868928 log_utils.hpp:37] [RDMA] CLIENT SEND METRICS (UCX Level - for bandwidth calculation):
+I20250619 09:46:38.378119 140217791868928 log_utils.hpp:32] [RDMA]   UCX operation time: 18616.000 us
+I20250619 09:46:38.378125 140217791868928 log_utils.hpp:32] [RDMA]   UCX bandwidth: 53.717232 GB/s
+I20250619 09:46:38.378130 140217791868928 log_utils.hpp:32] [RDMA]   Tag: 100
+I20250619 09:46:38.378136 140217791868928 log_utils.hpp:37] [RDMA] ========================================
+FastChannelManager: State changed from 3 to 7
+FastChannelManager: State machine thread exiting
+FastChannelManager: Progress thread joined
+error: Recipe `runc` was terminated on line 21 by signal 9

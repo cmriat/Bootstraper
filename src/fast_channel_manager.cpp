@@ -1,8 +1,11 @@
 #include "fast_channel_manager.hpp"
+#include "fmt/ostream.h"
+#include "ucxx/context.h"
 #include <iostream>
 #include <chrono>
 #include <algorithm>
 #include <cstring>
+#include <thread>
 
 #ifdef CUDA_AVAILABLE
 #include <cuda_runtime.h>
@@ -17,7 +20,8 @@ static std::mutex g_coroutine_manager_mutex;
 
 FCAwaitable::FCAwaitable(FastChannelManager* mgr, FCOpType type, void* data,
                              size_t size, uint64_t tag, const std::string& addr, uint16_t port)
-    : manager(mgr), op_type(type), data(data), size(size), tag(tag), remote_port(port) {
+    : manager(mgr), op_type(type), data(data), size(size), tag(tag), remote_port(port),
+      remote_memory_addr(0), remote_addr_offset(0) {
         try {
             if (!addr.empty()) {
                 remote_addr = addr;
@@ -27,6 +31,13 @@ FCAwaitable::FCAwaitable(FastChannelManager* mgr, FCOpType type, void* data,
         } catch (const std::bad_alloc& e) {
             remote_addr = "127.0.0.1";  // Fallback
         }
+}
+
+// Constructor for memory operations
+FCAwaitable::FCAwaitable(FastChannelManager* mgr, FCOpType type, void* data, size_t size,
+                           uint64_t remote_addr, std::shared_ptr<ucxx::RemoteKey> remote_key, uint64_t offset)
+    : manager(mgr), op_type(type), data(data), size(size), tag(0), remote_port(0),
+      remote_memory_addr(remote_addr), remote_key(remote_key), remote_addr_offset(offset) {
 }
 
 void FCAwaitable::await_suspend(std::coroutine_handle<> handle) {
@@ -49,6 +60,12 @@ void FCAwaitable::await_suspend(std::coroutine_handle<> handle) {
         }
 
         op.remote_port = remote_port;
+
+        // Set memory operation specific fields
+        op.remote_memory_addr = remote_memory_addr;
+        op.remote_key = remote_key;
+        op.remote_addr_offset = remote_addr_offset;
+
         op.handle = handle;
         op.result_ptr = &result;
 
@@ -79,7 +96,8 @@ void StateChangeAwaitable::await_suspend(std::coroutine_handle<> handle) {
 
 // FastChannelManager implementation
 FastChannelManager::FastChannelManager()
-    : _coroutine_queue(1024), _active_send_op_storage(FCOpType::TAG_SEND), _active_recv_op_storage(FCOpType::TAG_RECV) {
+    : _coroutine_queue(1024), _active_send_op_storage(FCOpType::TAG_SEND), _active_recv_op_storage(FCOpType::TAG_RECV),
+      _active_mem_put_op_storage(FCOpType::MEM_PUT), _active_mem_get_op_storage(FCOpType::MEM_GET) {
     std::cout << "FastChannelManager: Constructor called" << std::endl;
 }
 
@@ -110,13 +128,20 @@ bool FastChannelManager::initialize(bool server_mode, uint16_t port, int cuda_de
     }
 
     try {
+        // Configure UCX with proper CUDA transports
         ucxx::ConfigMap config = {
             {"TLS", "all"}
         };
+
+        std::cout << "FastChannelManager: Creating UCX context with CUDA transports" << std::endl;
         _context = ucxx::createContext(config, ucxx::Context::defaultFeatureFlags);
-        _worker = _context->createWorker();
+        _worker = _context->createWorker(false);
+
         if (_context->hasCudaSupport()) {
             std::cout << "CUDA IPC support is available" << std::endl;
+            std::cout << _context->getInfo() << std::endl;
+        } else {
+            std::cout << "WARNING: CUDA support not available in UCX context" << std::endl;
         }
         // Start threads
         _running = true;
@@ -168,6 +193,8 @@ void FastChannelManager::shutdown() {
     // Clean up UCXX resources before resuming coroutines
     _active_send_request.reset();
     _active_recv_request.reset();
+    _active_mem_put_request.reset();
+    _active_mem_get_request.reset();
     _endpoint.reset();
     _listener.reset();
     _worker.reset();
@@ -202,6 +229,16 @@ FCAwaitable FastChannelManager::tag_send(void* data, size_t size, uint64_t tag) 
 
 FCAwaitable FastChannelManager::tag_recv(void* data, size_t size, uint64_t tag) {
     return FCAwaitable(this, FCOpType::TAG_RECV, data, size, tag);
+}
+
+FCAwaitable FastChannelManager::mem_put(void* local_data, size_t size, uint64_t remote_addr,
+                                       std::shared_ptr<ucxx::RemoteKey> remote_key, uint64_t offset) {
+    return FCAwaitable(this, FCOpType::MEM_PUT, local_data, size, remote_addr, remote_key, offset);
+}
+
+FCAwaitable FastChannelManager::mem_get(void* local_data, size_t size, uint64_t remote_addr,
+                                       std::shared_ptr<ucxx::RemoteKey> remote_key, uint64_t offset) {
+    return FCAwaitable(this, FCOpType::MEM_GET, local_data, size, remote_addr, remote_key, offset);
 }
 
 FCAwaitable FastChannelManager::connect(const std::string& remote_addr, uint16_t remote_port) {
@@ -251,12 +288,31 @@ void FastChannelManager::submit_coroutine_operation(CoroutineOperation op) {
 }
 
 void FastChannelManager::notify_state_change(FCState new_state) {
+    // Record state exchange timing for SENDING state (tagSend call chain analysis)
+    if (new_state == FCState::SENDING) {
+        _last_send_timing.state_exchange_start = std::chrono::high_resolution_clock::now();
+    }
+
     FCState old_state = _current_state.exchange(new_state);
+
+    if (new_state == FCState::SENDING) {
+        _last_send_timing.state_exchange_end = std::chrono::high_resolution_clock::now();
+    }
+
     if (old_state != new_state) {
-        std::cout << "FastChannelManager: State changed from " << static_cast<int>(old_state) 
+        std::cout << "FastChannelManager: State changed from " << static_cast<int>(old_state)
                   << " to " << static_cast<int>(new_state) << std::endl;
-        
+
+        // Record resume_state_waiters timing for SENDING state
+        if (new_state == FCState::SENDING) {
+            _last_send_timing.resume_waiters_start = std::chrono::high_resolution_clock::now();
+        }
+
         resume_state_waiters(new_state);
+
+        if (new_state == FCState::SENDING) {
+            _last_send_timing.resume_waiters_end = std::chrono::high_resolution_clock::now();
+        }
     }
 }
 
@@ -341,7 +397,7 @@ void FastChannelManager::progress_thread_func() {
         }
 
         // Small sleep to avoid busy waiting
-        std::this_thread::sleep_for(std::chrono::microseconds(100));
+        // std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
 }
 
@@ -401,7 +457,8 @@ void FastChannelManager::state_machine_thread_func() {
         }
 
         // Small sleep to avoid busy waiting
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // std::this_thread::sleep_for(std::chrono::microseconds(1));
+        std::this_thread::sleep_for(std::chrono::nanoseconds(10));
     }
 
     std::cout << "FastChannelManager: State machine thread exiting" << std::endl;
@@ -427,11 +484,40 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                     return;
                 }
 
+                // Record detailed timing for complete call chain analysis
+                _last_send_timing.queue_submit_time = std::chrono::high_resolution_clock::now();
+                _last_send_timing.bytes_transferred = op.size;
+                _last_send_timing.tag = op.tag;
+                _last_send_timing.completed = false;
+
+                std::cout << "FastChannelManager: Processing tagSend operation at "
+                          << std::chrono::duration_cast<std::chrono::microseconds>(
+                              _last_send_timing.queue_submit_time.time_since_epoch()).count()
+                          << " us" << std::endl;
+
+                // Record UCX call start
+                _last_send_timing.ucx_call_start = std::chrono::high_resolution_clock::now();
+                _last_send_timing.ucx_start = _last_send_timing.ucx_call_start;  // For compatibility
+
                 _active_send_request = _endpoint->tagSend(op.data, op.size, ucxx::Tag{op.tag});
+
+                // Record UCX call return
+                _last_send_timing.ucx_call_return = std::chrono::high_resolution_clock::now();
+
+                std::cout << "FastChannelManager: UCX tagSend() call took "
+                          << _last_send_timing.ucx_call_overhead_us() << " us" << std::endl;
+
                 // Store a copy of the operation to avoid dangling pointer
                 _active_send_op_storage = op;
                 _active_send_op = &_active_send_op_storage;
+
+                // Record notify_state_change start
+                _last_send_timing.notify_state_change_start = std::chrono::high_resolution_clock::now();
                 notify_state_change(FCState::SENDING);
+                _last_send_timing.notify_state_change_end = std::chrono::high_resolution_clock::now();
+
+                std::cout << "FastChannelManager: notify_state_change() took "
+                          << _last_send_timing.notify_state_overhead_us() << " us" << std::endl;
                 break;
             }
 
@@ -444,7 +530,13 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                     return;
                 }
 
+                // No timing for receive operations (server-side)
+                std::cout << "FastChannelManager: Starting UCX tagRecv" << std::endl;
+
                 _active_recv_request = _endpoint->tagRecv(op.data, op.size, ucxx::Tag{op.tag}, ucxx::TagMaskFull);
+
+                std::cout << "FastChannelManager: UCX tagRecv request created, waiting for completion..." << std::endl;
+
                 // Store a copy of the operation to avoid dangling pointer
                 _active_recv_op_storage = op;
                 _active_recv_op = &_active_recv_op_storage;
@@ -458,23 +550,53 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                 try {
                     // Check if we already have an endpoint to avoid multiple connections
                     if (_endpoint) {
+                        std::cout << "FastChannelManager: Using existing endpoint connection" << std::endl;
                         notify_state_change(FCState::CONNECTED);
                         if (op.result_ptr) {
                             *op.result_ptr = FCOpResult(FCResult::SUCCESS, 0);
                         }
                     } else {
-                        // Add a small delay to reduce memory pressure
-                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        std::cout << "FastChannelManager: Creating new endpoint connection to "
+                                  << op.remote_addr << ":" << op.remote_port << std::endl;
 
-                        _endpoint = _worker->createEndpointFromHostname(op.remote_addr.c_str(), op.remote_port, true);
-                        notify_state_change(FCState::CONNECTED);
+                        // Add a small delay to reduce memory pressure and allow server to be ready
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-                        if (op.result_ptr) {
-                            *op.result_ptr = FCOpResult(FCResult::SUCCESS, 0);
+                        // Attempt connection with retry logic
+                        int max_retries = 3;
+                        bool connected = false;
+
+                        for (int retry = 0; retry < max_retries && !connected; ++retry) {
+                            try {
+                                if (retry > 0) {
+                                    std::cout << "FastChannelManager: Connection attempt " << (retry + 1)
+                                              << " of " << max_retries << std::endl;
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(1000 * retry));
+                                }
+
+                                _endpoint = _worker->createEndpointFromHostname(op.remote_addr.c_str(), op.remote_port, true);
+                                connected = true;
+                                std::cout << "FastChannelManager: Successfully connected to "
+                                          << op.remote_addr << ":" << op.remote_port << std::endl;
+
+                            } catch (const std::exception& e) {
+                                std::cerr << "FastChannelManager: Connection attempt " << (retry + 1)
+                                          << " failed: " << e.what() << std::endl;
+                                if (retry == max_retries - 1) {
+                                    throw;  // Re-throw on final attempt
+                                }
+                            }
+                        }
+
+                        if (connected) {
+                            notify_state_change(FCState::CONNECTED);
+                            if (op.result_ptr) {
+                                *op.result_ptr = FCOpResult(FCResult::SUCCESS, 0);
+                            }
                         }
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << "FastChannelManager: Connect failed: " << e.what() << std::endl;
+                    std::cerr << "FastChannelManager: Connect failed after all retries: " << e.what() << std::endl;
                     notify_state_change(FCState::ERROR);
                     if (op.result_ptr) {
                         *op.result_ptr = FCOpResult(FCResult::FAILURE, 0);
@@ -495,6 +617,42 @@ void FastChannelManager::process_coroutine_operation(const CoroutineOperation& o
                     *op.result_ptr = FCOpResult(FCResult::SUCCESS, 0);
                 }
                 safe_resume_coroutine(op.handle);
+                break;
+            }
+
+            case FCOpType::MEM_PUT: {
+                if (!_endpoint) {
+                    std::cerr << "FastChannelManager: No endpoint available for mem put" << std::endl;
+                    if (op.result_ptr) {
+                        *op.result_ptr = FCOpResult(FCResult::DISCONNECTED, 0);
+                    }
+                    safe_resume_coroutine(op.handle);
+                    return;
+                }
+
+                _active_mem_put_request = _endpoint->memPut(op.data, op.size, op.remote_key, op.remote_addr_offset);
+                // Store a copy of the operation to avoid dangling pointer
+                _active_mem_put_op_storage = op;
+                _active_mem_put_op = &_active_mem_put_op_storage;
+                notify_state_change(FCState::SENDING);
+                break;
+            }
+
+            case FCOpType::MEM_GET: {
+                if (!_endpoint) {
+                    std::cerr << "FastChannelManager: No endpoint available for mem get" << std::endl;
+                    if (op.result_ptr) {
+                        *op.result_ptr = FCOpResult(FCResult::DISCONNECTED, 0);
+                    }
+                    safe_resume_coroutine(op.handle);
+                    return;
+                }
+
+                _active_mem_get_request = _endpoint->memGet(op.data, op.size, op.remote_key, op.remote_addr_offset);
+                // Store a copy of the operation to avoid dangling pointer
+                _active_mem_get_op_storage = op;
+                _active_mem_get_op = &_active_mem_get_op_storage;
+                notify_state_change(FCState::RECEIVING);
                 break;
             }
 
@@ -534,14 +692,51 @@ void FastChannelManager::handle_connected_state() {
 }
 
 void FastChannelManager::handle_sending_state() {
-    if (_active_send_request && _active_send_request->isCompleted()) {
+    // Record state machine entry time for tagSend call chain analysis
+    if (_active_send_request && !_last_send_timing.completed) {
+        // Only record once when we first enter this state for this operation
+        if (_last_send_timing.state_machine_entry.time_since_epoch().count() == 0) {
+            _last_send_timing.state_machine_entry = std::chrono::high_resolution_clock::now();
+        }
+    }
+
+    // Handle tag send operations
+    if (_active_send_request) {
+        // Record isCompleted check time
+        _last_send_timing.is_completed_check = std::chrono::high_resolution_clock::now();
+
+        if (_active_send_request->isCompleted()) {
+            // Record completion detection time
+            _last_send_timing.completion_detected = std::chrono::high_resolution_clock::now();
+            _last_send_timing.ucx_end = _last_send_timing.completion_detected;  // For compatibility
+            _last_send_timing.completed = true;
+
+            std::cout << "FastChannelManager: UCX tagSend completion detected at "
+                      << std::chrono::duration_cast<std::chrono::microseconds>(
+                          _last_send_timing.completion_detected.time_since_epoch()).count()
+                      << " us" << std::endl;
+
+        // Calculate and log client-side bandwidth (for bandwidth calculation)
+        std::cout << "FastChannelManager: CLIENT SEND - UCX operation duration: "
+                  << _last_send_timing.duration_us() << " us, "
+                  << "bandwidth: " << _last_send_timing.bandwidth_gbps() << " GB/s, "
+                  << "bytes: " << _last_send_timing.bytes_transferred << std::endl;
+
         try {
             _active_send_request->checkError();
             if (_active_send_op && _active_send_op->result_ptr) {
                 *_active_send_op->result_ptr = FCOpResult(FCResult::SUCCESS, _active_send_op->size);
             }
             if (_active_send_op) {
+                // Record coroutine resume time
+                auto resume_start = std::chrono::high_resolution_clock::now();
                 safe_resume_coroutine(_active_send_op->handle);
+                _last_send_timing.coroutine_resumed = std::chrono::high_resolution_clock::now();
+
+                std::cout << "FastChannelManager: Coroutine resumed in "
+                          << std::chrono::duration_cast<std::chrono::microseconds>(
+                              _last_send_timing.coroutine_resumed - resume_start).count()
+                          << " us" << std::endl;
             }
         } catch (const std::exception& e) {
             if (_active_send_op && _active_send_op->result_ptr) {
@@ -555,11 +750,41 @@ void FastChannelManager::handle_sending_state() {
         _active_send_request.reset();
         _active_send_op = nullptr;
         notify_state_change(FCState::CONNECTED);
+        }
+    }
+
+    // Handle memory put operations
+    if (_active_mem_put_request && _active_mem_put_request->isCompleted()) {
+        try {
+            _active_mem_put_request->checkError();
+            if (_active_mem_put_op && _active_mem_put_op->result_ptr) {
+                *_active_mem_put_op->result_ptr = FCOpResult(FCResult::SUCCESS, _active_mem_put_op->size);
+            }-
+            if (_active_mem_put_op) {
+                safe_resume_coroutine(_active_mem_put_op->handle);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "FastChannelManager: Memory put operation failed: " << e.what() << std::endl;
+            if (_active_mem_put_op && _active_mem_put_op->result_ptr) {
+                *_active_mem_put_op->result_ptr = FCOpResult(FCResult::FAILURE, 0);
+            }
+            if (_active_mem_put_op) {
+                safe_resume_coroutine(_active_mem_put_op->handle);
+            }
+        }
+
+        _active_mem_put_request.reset();
+        _active_mem_put_op = nullptr;
+        notify_state_change(FCState::CONNECTED);
     }
 }
 
 void FastChannelManager::handle_receiving_state() {
+    // Handle tag receive operations
     if (_active_recv_request && _active_recv_request->isCompleted()) {
+        // No timing for receive operations (server-side)
+        std::cout << "FastChannelManager: UCX tagRecv completed" << std::endl;
+
         try {
             _active_recv_request->checkError();
             if (_active_recv_op && _active_recv_op->result_ptr) {
@@ -580,6 +805,31 @@ void FastChannelManager::handle_receiving_state() {
 
         _active_recv_request.reset();
         _active_recv_op = nullptr;
+        notify_state_change(FCState::CONNECTED);
+    }
+
+    // Handle memory get operations
+    if (_active_mem_get_request && _active_mem_get_request->isCompleted()) {
+        try {
+            _active_mem_get_request->checkError();
+            if (_active_mem_get_op && _active_mem_get_op->result_ptr) {
+                *_active_mem_get_op->result_ptr = FCOpResult(FCResult::SUCCESS, _active_mem_get_op->size);
+            }
+            if (_active_mem_get_op) {
+                safe_resume_coroutine(_active_mem_get_op->handle);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "FastChannelManager: Memory get operation failed: " << e.what() << std::endl;
+            if (_active_mem_get_op && _active_mem_get_op->result_ptr) {
+                *_active_mem_get_op->result_ptr = FCOpResult(FCResult::FAILURE, 0);
+            }
+            if (_active_mem_get_op) {
+                safe_resume_coroutine(_active_mem_get_op->handle);
+            }
+        }
+
+        _active_mem_get_request.reset();
+        _active_mem_get_op = nullptr;
         notify_state_change(FCState::CONNECTED);
     }
 }
@@ -666,12 +916,31 @@ bool FastChannelManager::initialize_cuda_context() {
 
         // Initialize CUDA context by allocating and freeing a small amount of memory
         void* dummy_ptr = nullptr;
-        err = cudaMalloc(&dummy_ptr, 1);
+        err = cudaMalloc(&dummy_ptr, 1024);  // Allocate slightly more to ensure context creation
         if (err != cudaSuccess) {
             std::cerr << "FastChannelManager: Failed to initialize CUDA context: "
                       << cudaGetErrorString(err) << std::endl;
             return false;
         }
+
+        // Force context creation by doing a memory operation
+        err = cudaMemset(dummy_ptr, 0, 1024);
+        if (err != cudaSuccess) {
+            std::cerr << "FastChannelManager: Failed to initialize CUDA context (memset): "
+                      << cudaGetErrorString(err) << std::endl;
+            cudaFree(dummy_ptr);
+            return false;
+        }
+
+        // Synchronize to ensure context is fully established
+        err = cudaDeviceSynchronize();
+        if (err != cudaSuccess) {
+            std::cerr << "FastChannelManager: Failed to synchronize CUDA device: "
+                      << cudaGetErrorString(err) << std::endl;
+            cudaFree(dummy_ptr);
+            return false;
+        }
+
         cudaFree(dummy_ptr);
 
         std::cout << "FastChannelManager: Successfully initialized CUDA context on device "
@@ -716,6 +985,21 @@ void FastChannelManager::setup_cuda_context_for_thread() {
         std::cerr << "FastChannelManager: Exception during thread CUDA setup: " << e.what() << std::endl;
     }
 #endif
+}
+
+// Implementation of UCXOperationTiming::print_call_chain_breakdown
+void UCXOperationTiming::print_call_chain_breakdown() const {
+    std::cout << "=== TAGSEND TO ISCOMPLETED CALL CHAIN BREAKDOWN ===" << std::endl;
+    std::cout << "1. Queue processing overhead: " << queue_overhead_us() << " us" << std::endl;
+    std::cout << "2. UCX tagSend() call: " << ucx_call_overhead_us() << " us" << std::endl;
+    std::cout << "3. notify_state_change() overhead: " << notify_state_overhead_us() << " us" << std::endl;
+    std::cout << "   - state.exchange(): " << state_exchange_overhead_us() << " us" << std::endl;
+    std::cout << "   - resume_state_waiters(): " << resume_waiters_overhead_us() << " us" << std::endl;
+    std::cout << "4. State machine wait: " << state_machine_wait_us() << " us" << std::endl;
+    std::cout << "5. Progress wait (until isCompleted): " << progress_wait_us() << " us" << std::endl;
+    std::cout << "6. Coroutine resume overhead: " << resume_overhead_us() << " us" << std::endl;
+    std::cout << "Total: " << duration_us() << " us" << std::endl;
+    std::cout << "=================================================" << std::endl;
 }
 
 } // namespace btsp

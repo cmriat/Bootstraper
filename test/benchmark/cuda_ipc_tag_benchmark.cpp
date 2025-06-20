@@ -572,8 +572,194 @@ static const std::vector<int64_t> ipc_buffer_sizes = {
     100 * 1024 * 1024       // 100MB
 };
 
+// Optimized benchmark with pre-allocated buffers and connection reuse
+void BM_CudaIpcTagSendRecv_Optimized(benchmark::State& state) {
+    if (!InitializeCudaIpcBenchmark()) {
+        state.SkipWithError("Failed to initialize CUDA IPC benchmark environment");
+        return;
+    }
+
+    const size_t buffer_size = state.range(0);
+    uint64_t tag_counter = 2000;
+    double total_transfer_time_us = 0.0;
+
+    // Pre-allocate buffers once to avoid allocation overhead
+    static std::shared_ptr<ucxx::Buffer> static_server_buffer;
+    static std::shared_ptr<ucxx::Buffer> static_client_buffer;
+    static size_t last_buffer_size = 0;
+
+    if (!static_server_buffer || last_buffer_size != buffer_size) {
+        static_server_buffer = ucxx::allocateBuffer(ucxx::BufferType::RMM, buffer_size);
+        static_client_buffer = ucxx::allocateBuffer(ucxx::BufferType::RMM, buffer_size);
+        last_buffer_size = buffer_size;
+
+        // Fill client buffer with test data once
+#ifdef CUDA_AVAILABLE
+        std::vector<char> host_data(buffer_size, 0x42);
+        cudaError_t err = cudaMemcpy(static_client_buffer->data(), host_data.data(),
+                                   buffer_size, cudaMemcpyHostToDevice);
+        if (err != cudaSuccess) {
+            state.SkipWithError("Failed to copy data to GPU");
+            return;
+        }
+#endif
+    }
+
+    for (auto _ : state) {
+        uint64_t tag = tag_counter++;
+
+        // Reset synchronization flags and results for each iteration
+        g_server_ready = false;
+        g_transfer_started = false;
+        g_server_recv_completed = false;
+        g_client_send_completed = false;
+        g_server_recv_result = OperationResult{};
+        g_client_send_result = OperationResult{};
+
+        // Use static buffers to avoid allocation overhead
+        g_server_recv_buffer = static_server_buffer;
+        g_client_send_buffer = static_client_buffer;
+
+        // Start server receive in background thread
+        std::thread server_thread([&]() {
+            g_server_recv_completed = false;
+            g_server_recv_result = OperationResult{};
+
+            try {
+                // Start the coroutine task
+                auto task = server_recv_coroutine(buffer_size, tag);
+
+                // Wait for completion with timeout
+                auto start = std::chrono::steady_clock::now();
+                while ((std::chrono::steady_clock::now() - start) < std::chrono::seconds(10)) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+                    // Check if operation completed by checking if end_time is set
+                    if (g_server_recv_result.end_time != std::chrono::high_resolution_clock::time_point{}) {
+                        g_server_recv_completed = true;
+                        break;
+                    }
+                }
+
+                if (!g_server_recv_completed) {
+                    g_server_recv_result.success = false;
+                    g_server_recv_result.end_time = std::chrono::high_resolution_clock::now();
+                    g_server_recv_result.actual_transfer_end = g_server_recv_result.end_time;
+                    g_server_recv_completed = true;
+                }
+
+            } catch (const std::exception& e) {
+                g_server_recv_result.success = false;
+                g_server_recv_result.end_time = std::chrono::high_resolution_clock::now();
+                g_server_recv_result.actual_transfer_end = g_server_recv_result.end_time;
+                g_server_recv_completed = true;
+            }
+        });
+
+        // Minimal delay to ensure server thread starts first
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+
+        // Start client send in background thread
+        std::thread client_thread([&]() {
+            g_client_send_completed = false;
+            g_client_send_result = OperationResult{};
+
+            try {
+                // Start the coroutine task
+                auto task = client_send_coroutine(buffer_size, tag);
+
+                // Wait for completion with timeout
+                auto start = std::chrono::steady_clock::now();
+                while ((std::chrono::steady_clock::now() - start) < std::chrono::seconds(10)) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+                    // Check if operation completed by checking if end_time is set
+                    if (g_client_send_result.end_time != std::chrono::high_resolution_clock::time_point{}) {
+                        g_client_send_completed = true;
+                        break;
+                    }
+                }
+
+                if (!g_client_send_completed) {
+                    g_client_send_result.success = false;
+                    g_client_send_result.end_time = std::chrono::high_resolution_clock::now();
+                    g_client_send_result.actual_transfer_end = g_client_send_result.end_time;
+                    g_client_send_completed = true;
+                }
+
+            } catch (const std::exception& e) {
+                g_client_send_result.success = false;
+                g_client_send_result.end_time = std::chrono::high_resolution_clock::now();
+                g_client_send_result.actual_transfer_end = g_client_send_result.end_time;
+                g_client_send_completed = true;
+            }
+        });
+
+        // Wait for both operations to complete and get results
+        auto [recv_result, send_result] = wait_for_operations(std::chrono::milliseconds(12000));
+
+        // Wait for threads to finish
+        server_thread.join();
+        client_thread.join();
+
+        if (!recv_result.success || !send_result.success) {
+            std::cerr << "Optimized iteration failed - recv_success: " << recv_result.success
+                      << ", send_success: " << send_result.success << std::endl;
+            state.SkipWithError("Send or receive operation failed");
+            return;
+        }
+
+        // Calculate the actual data transfer time
+        auto actual_transfer_time_us = recv_result.actual_transfer_duration_us();
+
+        total_transfer_time_us += actual_transfer_time_us;
+        state.SetIterationTime(actual_transfer_time_us / 1000000.0);
+
+        // Store detailed timing information
+        state.counters["ActualTransferTime_us"] = actual_transfer_time_us;
+        state.counters["RecvOperationTime_us"] = recv_result.duration_us();
+        state.counters["SendOperationTime_us"] = send_result.duration_us();
+    }
+
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations()) * buffer_size);
+
+    // Calculate average metrics based on actual transfer times
+    double avg_transfer_time_us = total_transfer_time_us / static_cast<double>(state.iterations());
+    double bandwidth_gbps = (static_cast<double>(buffer_size) / (avg_transfer_time_us / 1000000.0)) / (1024.0 * 1024.0 * 1024.0);
+
+    // Add custom counters for better analysis
+    state.counters["BufferSize_B"] = buffer_size;
+    state.counters["Bandwidth_GBps"] = bandwidth_gbps;
+    state.counters["AvgActualTransferTime_us"] = avg_transfer_time_us;
+    state.counters["Throughput_MBps"] = (static_cast<double>(buffer_size) / (avg_transfer_time_us / 1000000.0)) / (1024.0 * 1024.0);
+
+    // Format label with device info
+    std::string size_str;
+    if (buffer_size >= 1024*1024*1024) {
+        size_str = fmt::format("{:.1f}GB", static_cast<double>(buffer_size)/(1024*1024*1024));
+    } else if (buffer_size >= 1024*1024) {
+        size_str = fmt::format("{}MB", buffer_size/(1024*1024));
+    } else if (buffer_size >= 1024) {
+        size_str = fmt::format("{}KB", buffer_size/1024);
+    } else {
+        size_str = fmt::format("{}B", buffer_size);
+    }
+
+    std::string label = fmt::format("CUDA_IPC_Optimized_Dev{}->Dev{}_{}",
+                                   g_config.server_cuda_device,
+                                   g_config.client_cuda_device,
+                                   size_str);
+    state.SetLabel(label);
+}
+
 // Register benchmarks
 BENCHMARK(BM_CudaIpcTagSendRecv)
+    ->ArgsProduct({ipc_buffer_sizes})
+    ->Unit(benchmark::kMicrosecond)
+    ->UseManualTime()
+    ->Iterations(5);
+
+BENCHMARK(BM_CudaIpcTagSendRecv_Optimized)
     ->ArgsProduct({ipc_buffer_sizes})
     ->Unit(benchmark::kMicrosecond)
     ->UseManualTime()

@@ -14,6 +14,7 @@
 #include <string>
 #include <coroutine>
 #include <optional>
+#include <chrono>
 
 namespace btsp {
 
@@ -29,6 +30,8 @@ enum class FCResult {
 enum class FCOpType {
     TAG_SEND,
     TAG_RECV,
+    MEM_PUT,
+    MEM_GET,
     CONNECT,
     LISTEN,
     SHUTDOWN
@@ -48,6 +51,79 @@ enum class FCState {
 
 // Forward declaration
 class FastChannelManager;
+
+// UCX operation timing structure with complete call chain breakdown
+struct UCXOperationTiming {
+    // Legacy timing points for compatibility
+    std::chrono::high_resolution_clock::time_point ucx_start;
+    std::chrono::high_resolution_clock::time_point ucx_end;
+
+    // Complete call chain timing points (tagSend to isCompleted path)
+    std::chrono::high_resolution_clock::time_point queue_submit_time;           // When operation enters process_coroutine_operation
+    std::chrono::high_resolution_clock::time_point ucx_call_start;             // Before _endpoint->tagSend()
+    std::chrono::high_resolution_clock::time_point ucx_call_return;            // After _endpoint->tagSend()
+    std::chrono::high_resolution_clock::time_point notify_state_change_start;  // Before notify_state_change(SENDING)
+    std::chrono::high_resolution_clock::time_point notify_state_change_end;    // After notify_state_change(SENDING)
+    std::chrono::high_resolution_clock::time_point state_exchange_start;       // Before _current_state.exchange()
+    std::chrono::high_resolution_clock::time_point state_exchange_end;         // After _current_state.exchange()
+    std::chrono::high_resolution_clock::time_point resume_waiters_start;       // Before resume_state_waiters()
+    std::chrono::high_resolution_clock::time_point resume_waiters_end;         // After resume_state_waiters()
+    std::chrono::high_resolution_clock::time_point state_machine_entry;        // When state machine enters handle_sending_state
+    std::chrono::high_resolution_clock::time_point is_completed_check;         // When isCompleted() is called
+    std::chrono::high_resolution_clock::time_point completion_detected;        // When isCompleted() returns true
+    std::chrono::high_resolution_clock::time_point coroutine_resumed;          // When coroutine is resumed
+
+    size_t bytes_transferred = 0;
+    uint64_t tag = 0;
+    bool completed = false;
+
+    double duration_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(ucx_end - ucx_start).count();
+    }
+
+    double bandwidth_gbps() const {
+        if (duration_us() <= 0 || bytes_transferred == 0) return 0.0;
+        double duration_sec = duration_us() / 1e6;
+        double bytes_per_sec = bytes_transferred / duration_sec;
+        return bytes_per_sec / (1024.0 * 1024.0 * 1024.0);  // Convert to GB/s
+    }
+
+    // Detailed timing analysis functions
+    double queue_overhead_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(ucx_call_start - queue_submit_time).count();
+    }
+
+    double ucx_call_overhead_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(ucx_call_return - ucx_call_start).count();
+    }
+
+    double notify_state_overhead_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(notify_state_change_end - notify_state_change_start).count();
+    }
+
+    double state_exchange_overhead_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(state_exchange_end - state_exchange_start).count();
+    }
+
+    double resume_waiters_overhead_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(resume_waiters_end - resume_waiters_start).count();
+    }
+
+    double state_machine_wait_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(state_machine_entry - notify_state_change_end).count();
+    }
+
+    double progress_wait_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(completion_detected - is_completed_check).count();
+    }
+
+    double resume_overhead_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(coroutine_resumed - completion_detected).count();
+    }
+
+    // Print detailed breakdown (implemented in .cpp file)
+    void print_call_chain_breakdown() const;
+};
 
 // RDMA operation result with bytes transferred
 struct FCOpResult {
@@ -206,17 +282,21 @@ private:
 // Awaitable for RDMA operations
 class FCAwaitable {
 public:
-    FCAwaitable(FastChannelManager* manager, FCOpType type, void* data = nullptr, 
+    FCAwaitable(FastChannelManager* manager, FCOpType type, void* data = nullptr,
                   size_t size = 0, uint64_t tag = 0, const std::string& addr = "", uint16_t port = 0);
-    
+
+    // Constructor for memory operations with remote key
+    FCAwaitable(FastChannelManager* manager, FCOpType type, void* data, size_t size,
+                  uint64_t remote_addr, std::shared_ptr<ucxx::RemoteKey> remote_key, uint64_t offset = 0);
+
     bool await_ready() const noexcept { return false; }
-    
+
     void await_suspend(std::coroutine_handle<> handle);
-    
+
     FCOpResult await_resume() const noexcept {
         return result;
     }
-    
+
 private:
     FastChannelManager* manager;
     FCOpType op_type;
@@ -225,9 +305,15 @@ private:
     uint64_t tag;
     std::string remote_addr;  // Store the string directly to avoid dangling pointer
     uint16_t remote_port;
+
+    // Memory operation specific fields
+    uint64_t remote_memory_addr;
+    std::shared_ptr<ucxx::RemoteKey> remote_key;
+    uint64_t remote_addr_offset;
+
     mutable FCOpResult result;
     std::coroutine_handle<> suspended_handle;
-    
+
     friend class FastChannelManager;
 };
 
@@ -269,6 +355,11 @@ public:
     // Coroutine-based RDMA operations
     FCAwaitable tag_send(void* data, size_t size, uint64_t tag);
     FCAwaitable tag_recv(void* data, size_t size, uint64_t tag);
+
+    // Memory operations
+    FCAwaitable mem_put(void* local_data, size_t size, uint64_t remote_addr, std::shared_ptr<ucxx::RemoteKey> remote_key, uint64_t offset = 0);
+    FCAwaitable mem_get(void* local_data, size_t size, uint64_t remote_addr, std::shared_ptr<ucxx::RemoteKey> remote_key, uint64_t offset = 0);
+
     FCAwaitable connect(const std::string& remote_addr, uint16_t remote_port);
     FCAwaitable listen(uint16_t port);
     
@@ -285,6 +376,9 @@ public:
     std::shared_ptr<ucxx::Worker> get_worker() { return _worker; }
     std::shared_ptr<ucxx::Endpoint> get_endpoint() { return _endpoint; }
 
+    // Get UCX operation timing results (client-side only for bandwidth calculation)
+    UCXOperationTiming get_last_send_timing() const { return _last_send_timing; }
+
 private:
     friend class FCAwaitable;
     friend class StateChangeAwaitable;
@@ -299,8 +393,14 @@ private:
         uint16_t remote_port;
         std::coroutine_handle<> handle;
         FCOpResult* result_ptr;
-        
-        CoroutineOperation(FCOpType t) : type(t), data(nullptr), size(0), tag(0), remote_port(0), result_ptr(nullptr) {}
+
+        // Memory operation specific fields
+        uint64_t remote_memory_addr;
+        std::shared_ptr<ucxx::RemoteKey> remote_key;
+        uint64_t remote_addr_offset;
+
+        CoroutineOperation(FCOpType t) : type(t), data(nullptr), size(0), tag(0), remote_port(0),
+                                       result_ptr(nullptr), remote_memory_addr(0), remote_addr_offset(0) {}
     };
     
     // State change waiter
@@ -373,12 +473,21 @@ private:
     // Active operations tracking
     std::shared_ptr<ucxx::Request> _active_send_request;
     std::shared_ptr<ucxx::Request> _active_recv_request;
+    std::shared_ptr<ucxx::Request> _active_mem_put_request;
+    std::shared_ptr<ucxx::Request> _active_mem_get_request;
     CoroutineOperation* _active_send_op{nullptr};
     CoroutineOperation* _active_recv_op{nullptr};
+    CoroutineOperation* _active_mem_put_op{nullptr};
+    CoroutineOperation* _active_mem_get_op{nullptr};
 
     // Storage for active operations to avoid dangling pointers
     CoroutineOperation _active_send_op_storage;
     CoroutineOperation _active_recv_op_storage;
+    CoroutineOperation _active_mem_put_op_storage;
+    CoroutineOperation _active_mem_get_op_storage;
+
+    // UCX operation timing storage (client-side only for bandwidth calculation)
+    UCXOperationTiming _last_send_timing;
 };
 
 // Global instance management (optional)
